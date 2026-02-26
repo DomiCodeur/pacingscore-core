@@ -1,5 +1,5 @@
 import { Component } from '@angular/core';
-import { YouTubeService } from '../../services/youtube.service';
+import { ShowService } from '../../services/show.service';
 
 @Component({
   selector: 'app-admin-panel',
@@ -89,15 +89,15 @@ export class AdminPanelComponent {
   message: string = '';
   error: boolean = false;
 
-  constructor(private youtubeService: YouTubeService) {}
+  constructor(private showService: ShowService) {}
 
   populate(): void {
     this.isLoading = true;
     this.progress = 0;
-    this.message = 'Démarrage de l\'analyse automatique...';
+    this.message = 'Démarrage de l\'analyse automatique TMDB...';
     this.error = false;
 
-    this.youtubeService.populateDatabase().subscribe({
+    this.showService.populateFromTMDB().subscribe({
       next: (response) => {
         this.message = response;
         this.isLoading = false;
@@ -119,7 +119,7 @@ export class AdminPanelComponent {
     this.error = false;
     this.results = [];
 
-    this.youtubeService.crawlAndAnalyze(this.searchTerm).subscribe({
+    this.showService.crawlAndAnalyze(this.searchTerm).subscribe({
       next: (videos) => {
         this.results = videos;
         this.message = `${videos.length} vidéos trouvées et analysées`;

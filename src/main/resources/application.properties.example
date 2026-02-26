@@ -2,7 +2,11 @@
 supabase.url=https://gjkwsrzmaecmtfozkwmw.supabase.co
 supabase.key=VOTRE_CLE_SUPABASE_ICI
 
-# YouTube API Key (à créer sur Google Cloud Console)
+# TMDB Configuration (The Movie Database)
+tmdb.api.key=VOTRE_CLE_TMDB_ICI
+tmdb.api.url=https://api.themoviedb.org/3
+
+# YouTube API Key (pour les vidéos YouTube)
 youtube.apiKey=VOTRE_CLE_YOUTUBE_ICI
 
 # Application Server
