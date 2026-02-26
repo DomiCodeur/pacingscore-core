@@ -28,31 +28,71 @@ public class AnalysisController {
     }
     
     /**
-     * Endpoint pour populer la base de données avec des dessins animés
+     * Endpoint pour populer la base de données avec des dessins animés connus
      */
     @PostMapping("/populate")
     public ResponseEntity<String> populateDatabase() {
-        // Rechercher des catégories de dessins animés
-        String[] searchTerms = {
-            "dessin animé enfant calm",
-            "dessin animé bébé",
-            "cartoon for kids slow",
-            "histoire pour les tout-petits",
-            "dessin animé éducatif",
-            "video calme enfants",
-            "dodo enfants petit"
+        // Liste PRÉDÉFINIE de dessins animés connus (pas de recherche random)
+        String[] cartoonTitles = {
+            // Très calmes - Pour tout-petits
+            "baby shark full episode",
+            "cocomelon nursery rhymes",
+            "super simple songs",
+            "baby einstein collection",
+            "bebu loulou grammont",
+            "loulou de grammont dessin animé",
+            "petit lapin blanc",
+            "winnie the pooh",
+            "berenstain bears",
+            "barbapapa",
+            
+            // Calmes - Pour jeunes enfants
+            "peppa pig full episodes",
+            "bluey full episodes",
+            "paw patrol full episodes",
+            "dora the explorer",
+            "spidey and his amazing friends",
+            "miffy dessin animé",
+            "sesame street episodes",
+            "blue's clues full episodes",
+            "totoro ghibli",
+            "my neighbor totoro",
+            
+            // Modérés - Pour enfants plus grands
+            "pokémon episodes",
+            "diego et les explorateurs",
+            "dinosaur train episodes",
+            "thomas the tank engine",
+            "mickey mouse clubhouse",
+            "prince de la saveur",
+            "la grande séquence",
+            
+            // Français
+            "astérix et obélix dessin animé",
+            "tintin dessin animé",
+            "pimpin et le lapin",
+            
+            // Disney
+            "snow white full movie",
+            "lion king full movie",
+            "pocahontas full movie",
+            "kiki's delivery service",
+            "spirited away"
         };
         
-        for (String term : searchTerms) {
+        int processed = 0;
+        for (String cartoon : cartoonTitles) {
             try {
-                crawlerService.crawlAndAnalyze(term);
-                Thread.sleep(1000); // Attendre entre les requêtes
-            } catch (InterruptedException e) {
-                // Continuer
+                System.out.println("Analyzing: " + cartoon);
+                crawlerService.crawlAndAnalyze(cartoon);
+                Thread.sleep(2000); // Attendre 2s entre les requêtes pour ne pas surcharger
+                processed++;
+            } catch (Exception e) {
+                System.err.println("Erreur pour " + cartoon + ": " + e.getMessage());
             }
         }
         
-        return ResponseEntity.ok("Base de données popuulée avec succès");
+        return ResponseEntity.ok("Base de données popuulée avec " + processed + " dessins animés connus");
     }
     
     /**
