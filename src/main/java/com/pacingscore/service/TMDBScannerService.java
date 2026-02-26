@@ -164,37 +164,141 @@ public class TMDBScannerService {
         }
     }
     
+    /**
+     * Calcule le score de calme basé sur la fréquence estimée des cuts de scène
+     * PRINCIPE : Moins de cuts = meilleur score
+     */
     private double calculatePacingScore(ShowInfo show) {
-        double score = 50; // Score de base
+        double score = 100; // Score maximal (moins de cuts = mieux)
         
         String title = show.getTitle().toLowerCase();
         String desc = show.getDescription().toLowerCase();
         String combined = title + " " + desc;
         
-        // Critères négatifs
-        if (combined.contains("action") || combined.contains("adventure")) score -= 15;
-        if (combined.contains("super") || combined.contains("hero")) score -= 10;
-        if (combined.contains("fight") || combined.contains("combat")) score -= 20;
+        // ==================== CRITÈRES D'ANALYSE ====================
         
-        // Critères positifs
-        if (combined.contains("calm") || combined.contains("doux") || combined.contains("douce")) score += 15;
-        if (combined.contains("bedtime") || combined.contains("dodo") || combined.contains("sleep")) score += 20;
-        if (combined.contains("educational") || combined.contains("éducatif")) score += 10;
-        if (combined.contains("petit") || combined.contains("baby") || combined.contains("tout-petit")) score += 10;
-        
-        // Ajustement selon le nombre d'épisodes
-        if (show.getEpisodeCount() > 100) {
-            score -= 10; // Longue série = potentiellement plus intense
-        } else if (show.getEpisodeCount() < 20) {
-            score += 10; // Série courte = peut-être plus calme
+        // 1. DURÉE MOYENNE DES ÉPISODES (critère majeur)
+        // Une durée courte signifie des cuts fréquents pour capter l'attention
+        if (show.getEpisodeCount() > 0 && show.getSeasonCount() > 0) {
+            double estimatedDuration = calculateEstimatedDuration(show);
+            
+            if (estimatedDuration < 3.0) { // < 3 min
+                score -= 40; // Très cuts fréquents (mauvais pour les enfants)
+            } else if (estimatedDuration < 5.0) { // 3-5 min
+                score -= 20; // Cuts fréquents
+            } else if (estimatedDuration < 10.0) { // 5-10 min
+                score -= 10; // Cuts modérés
+            } else if (estimatedDuration > 15.0) { // > 15 min
+                score += 15; // Cuts rares (bon pour les enfants)
+            }
         }
         
-        // Ajustement pour les très jeunes
+        // 2. TYPE DE CONTENU (critère majeur)
+        // La musique/dance a un rythme rapide avec beaucoup de cuts
+        if (combined.contains("music") || combined.contains("musique") || 
+            combined.contains("dance") || combined.contains("danse") || 
+            combined.contains("song") || combined.contains("chanson")) {
+            score -= 25; // Rythme très rapide
+        }
+        
+        // 3. MOTS-CLÉS SUGGÉRANT DES CUTS FRÉQUENTS
+        String[] fastCutKeywords = {
+            "fast", "rapide", "ultra", "hyper", "super", "explosive",
+            "fun", "funny", "comedy", "humor", "comédie",
+            "action", "adventure", "aventure", "hero",
+            "dance", "music", "musique", "chanson",
+            "exciting", "excitant", "thrilling"
+        };
+        
+        for (String keyword : fastCutKeywords) {
+            if (combined.contains(keyword)) {
+                score -= 15;
+            }
+        }
+        
+        // 4. MOTS-CLÉS SUGGÉRANT DES CUTS RARES
+        String[] calmCutKeywords = {
+            "calm", "slow", "lent", "doux", "douce",
+            "bedtime", "dodo", "sleep", "storytime",
+            "educational", "éducatif", "apprendre", "learning",
+            "story", "histoire", "narrative", "contes",
+            "gentil", "gentille", "sweet", "douceur"
+        };
+        
+        for (String keyword : calmCutKeywords) {
+            if (combined.contains(keyword)) {
+                score += 15;
+            }
+        }
+        
+        // 5. GENRE SPÉCIFIQUE (critère majeur)
+        for (String genre : show.getGenres()) {
+            if (genre.contains("music") || genre.contains("dance")) {
+                score -= 20;
+            } else if (genre.contains("family") || genre.contains("documentary")) {
+                score += 10;
+            } else if (genre.contains("comedy")) {
+                score -= 10;
+            }
+        }
+        
+        // 6. RÉSEAU DE DIFFUSION (YouTube = plus de cuts)
+        String network = show.getNetwork();
+        if (network != null) {
+            if (network.contains("youtube") || network.contains("netflix")) {
+                score -= 15; // YouTube/Netflix a tendance aux formats courts avec cuts fréquents
+            } else if (network.contains("disney") || network.contains("cartoon")) {
+                score -= 5; // Disney a des formats modérés
+            } else if (network.contains("educational") || network.contains("learning")) {
+                score += 15; // Chaînes éducatives = moins de cuts
+            }
+        }
+        
+        // 7. NOMBRE D'ÉPISODES (un gros nombre = tendance aux formats courts)
+        int totalEpisodes = show.getEpisodeCount();
+        if (totalEpisodes > 300) {
+            score -= 20; // Très longue série = tendance aux formats courts et cuts fréquents
+        } else if (totalEpisodes > 100) {
+            score -= 10;
+        } else if (totalEpisodes < 20) {
+            score += 10; // Courte série = peut-être plus cohérent
+        }
+        
+        // 8. AJUSTEMENT TRÈS JEUNES (0-3 ans)
+        // Les séries pour bébés sont souvent très lentes avec peu de cuts
         if (show.getAgeRating().equals("0+") || show.getAgeRating().equals("3+")) {
-            score += 10;
+            score += 20; // Ciblé pour les tout-petits = souvent plus calme
         }
         
+        // 9. AJUSTEMENT YOUTUBE (ajouté pour le projet)
+        // Si la série vient de YouTube, on pénalise car souvent des formats courts
+        if (title.contains("cocomelon") || title.contains("baby shark") || 
+            title.contains("cocomelon") || title.contains("lullaby")) {
+            score -= 30; // YouTube kids = très cuts fréquents
+        }
+        
+        // Limiter le score entre 0 et 100
         return Math.max(0, Math.min(100, score));
+    }
+    
+    private double calculateEstimatedDuration(ShowInfo show) {
+        // Estimation basée sur le nombre d'épisodes et la durée totale
+        // Pour les séries très longues, la durée moyenne par épisode est souvent courte
+        int totalEpisodes = show.getEpisodeCount();
+        int seasons = show.getSeasonCount();
+        
+        if (totalEpisodes == 0) return 10.0; // Par défaut 10 min
+        
+        // Estimation : plus d'épisodes = durée moyenne plus courte
+        double estimatedMinutes = 15.0; // Moyenne de base
+        
+        if (totalEpisodes > 500) estimatedMinutes = 2.0; // Cocomelon style
+        else if (totalEpisodes > 200) estimatedMinutes = 5.0;
+        else if (totalEpisodes > 100) estimatedMinutes = 8.0;
+        else if (totalEpisodes > 50) estimatedMinutes = 10.0;
+        else estimatedMinutes = 12.0;
+        
+        return estimatedMinutes;
     }
     
     private String determineAgeRating(ShowInfo show) {
