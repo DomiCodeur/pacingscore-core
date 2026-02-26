@@ -2,7 +2,45 @@
 
 Video pacing analysis engine for children's content safety - **Analyse réelle des cuts de scène**.
 
+## ⚠️ IMPORTANT - Configuration Requise
+
+Ce projet nécessite une configuration de clés API. **NE PAS** commiter le fichier `application.properties` avec des clés réelles.
+
+### Installation rapide
+
+```bash
+# 1. Cloner le repo
+git clone https://github.com/DomiCodeur/pacingscore-core.git
+cd pacingscore-core
+
+# 2. Créer application.properties avec vos clés
+cp src/main/resources/application.properties.example src/main/resources/application.properties
+# Editer le fichier pour ajouter vos clés API
+
+# 3. Vérifier .gitignore est configuré
+cat .gitignore | grep application.properties
+```
+
+### Fichier application.properties requis
+
+```properties
+# Application local - À créer manuellement
+# Le fichier example est fourni sans clés
+
+supabase.url=https://gjkwsrzmaecmtfozkwmw.supabase.co
+supabase.key=VOTRE_CLE_SUPABASE
+
+tmdb.api.key=VOTRE_CLE_TMDB
+tmdb.api.url=https://api.themoviedb.org/3
+
+youtube.apiKey=VOTRE_CLE_YOUTUBE
+
+server.port=8080
+spring.application.name=pacingscore
+```
+
 ## 🌟 La Vision
+
 **PacingScore** est le "Yuka" des contenus jeunesse. L'objectif est de protéger la santé cognitive des enfants en offrant aux parents un indicateur clair sur le niveau de stimulation visuelle des dessins animés.
 
 **Innovation technique** : Le système utilise **FFmpeg + yt-dlp** pour analyser réellement les vidéos et détecter la fréquence des cuts de scène (changements de scène), pas seulement les médonnées.
@@ -11,161 +49,191 @@ Video pacing analysis engine for children's content safety - **Analyse réelle d
 
 ## 🎯 Méthodologie : Analyse Réelle des Cuts de Scène
 
-### Le Problème
-Un dessin animé avec **beaucoup de cuts de scène** (changements de scène rapides) est mauvais pour les enfants car :
-- Capte l'attention de manière artificielle
-- Empêche la concentration et la réflexion
-- Crée une surstimulation cognitive nocive
-
-### La Solution : Analyse Vidéo Réelle
-
-Le système utilise **FFmpeg** pour analyser les vidéos et détecter les changements de scène :
-
-#### 1. **Téléchargement**
-```bash
-yt-dlp --download-sections "*0:00-5:00" [URL]  # Télécharge les 5 premières minutes
-```
-
-#### 2. **Détection des cuts**
-```bash
-ffmpeg -i video.mp4 -vf "select='gt(scene,0.4)',metadata=print:file=-"
-```
-
-L'analyse détecte les changements d'image avec un seuil de 0.4 :
-- Seuil bas = plus de détection de petits changements
-- Seuil haut = seuls les changements majeurs sont détectés
-
-#### 3. **Calcul du score**
+### ASL (Average Shot Length) - Durée Moyenne des Plans
 
 ```
-cuts_per_minute = total_cuts / durée (en minutes)
-
-Score = 100 - (cuts_per_minute × facteur)
-
-Règles :
-- < 2 cuts/min    → 95% (très calme)
-- 2-5 cuts/min    → 75% (calme)
-- 5-10 cuts/min   → 50% (modéré)
-- 10-15 cuts/min  → 30% (stimulant)
-- > 20 cuts/min   → 5% (très stimulant)
+ASL = Durée totale de la vidéo / Nombre de scènes détectées
 ```
 
-### Exemples Concrets (simulés)
+Plus l'ASL est élevée, plus le contenu est calme et adapté aux enfants.
 
-| Dessin animé | Cuts/min | Score | Analyse |
-|-------------|----------|-------|---------|
-| **Cocomelon** | ~25-30 | **5%** 🔴 | Rythme ultra-rapide, cuts très fréquents |
-| **Babar** | ~1-2 | **95%** 🟩 | Rythme calme, cuts rares |
-| **Baby Shark** | ~40+ | **2%** 🔴 | Extrêmement rythmé |
-| **Totoro** | ~0.5 | **98%** 🟩 | Film très calme, cuts quasi inexistants |
+### Échelle d'évaluation
 
-### Technologies
+| ASL (secondes) | Score | Évaluation | Description |
+|----------------|-------|------------|-------------|
+| < 4 | < 25% | 🔴 Très stimulant | Cuts extrêmement fréquents |
+| 4-6 | 25-45% | 🟠 Stimulant | Cuts fréquents |
+| 6-8 | 45-65% | 🟡 Modéré | Cuts normaux |
+| 8-10 | 65-80% | 🟢 Calme | Cuts modérés |
+| 10-14 | 80-95% | 🟢 Très calme | Cuts rares |
+| > 14 | > 95% | 🟢 Contemplatif | Cuts très rares |
 
-| Outil | Rôle | Installation |
-|-------|------|--------------|
-| **yt-dlp** | Télécharger les vidéos YouTube | `pip install yt-dlp` |
-| **FFmpeg** | Analyser les images et détecter les cuts | `apt install ffmpeg` ou `brew install ffmpeg` |
+### Exemples Concrets
 
-### Avantages de cette approche
+| Dessin animé | ASL | Score | Évaluation |
+|-------------|-----|-------|------------|
+| **Cocomelon** | ~2-3s | 5-15% | 🔴 Très stimulant |
+| **Baby Shark** | ~1-2s | 2-5% | 🔴 Extrêmement stimulant |
+| **Babar** | ~12-15s | 85-95% | 🟢 Très calme |
+| **Totoro** | ~15-20s | 95-98% | 🟢 Contemplatif |
 
-✅ **Précise** : Analyse réelle de la vidéo, pas d'estimation  
-✅ **Objective** : Basée sur les changements d'image, pas sur les mots-clés  
-✅ **Reproductible** : Méthode standard utilisée par les professionnels  
-✅ **Adaptable** : Seuil ajustable selon les besoins  
-
-### Limites
-
-⚠️ **Légalité** : Vérifier les conditions d'utilisation YouTube  
-⚠️ **Performance** : Analyse vidéo nécessite du temps et de l'espace  
-⚠️ **Coût infrastructure** : Nécessite un serveur capable d'exécuter FFmpeg
-
-## 📊 Indicateurs
-- **Indice de Calme (%)** : Plus le score est élevé, plus le rythme est serein
-- **Âge Recommandé** : 0+, 3+, 6+, 10+, 14+
-- **Exemples** :
-  - Cocomelon : 28% (très stimulant)
-  - Babar : 95% (très calme)
-
-## 🚀 Fonctionnalités
-
-### Analyse Vidéo Réelle (ASL - Average Shot Length)
-- [x] **Analyse des cuts de scène** avec PySceneDetect + FFmpeg
-- [x] **Métrique ASL** : Durée moyenne des plans en secondes
-- [x] **Scoring objectif** : Basé sur la fréquence réelle des changements de scène
-- [x] **Analyse des trailers** : Utilise les bandes-annonces YouTube depuis TMDB
-- [x] **Service Python** : Micro-service indépendant pour l'analyse vidéo
-
-### Pipeline Complet
-- [x] **Récupération TMDB** : Séries Animation + Family
-- [x] **Téléchargement** : yt-dlp télécharge 2 minutes de vidéo
-- [x] **Détection** : FFmpeg détecte les scènes avec seuil ajustable
-- [x] **Calcul ASL** : `Durée totale / Nombre de scènes`
-- [x] **Score** : `100 - (facteur × ASL bas)`
-- [x] **Stockage** : Supabase pour persistance
-
-### Interface
-- [x] Dashboard Kids-Friendly (style Netflix)
-- [x] Recherche par âge et score de calme
-- [x] Détection d'âge recommandé (0+, 3+, 6+, 10+, 14+)
-- [x] Évaluation détaillée des séries
-
-### Technologies
-- [x] **Backend** : Spring Boot 3 + Java 17
-- [x] **Analyse vidéo** : Python + PySceneDetect + FFmpeg
-- [x] **Téléchargement** : yt-dlp
-- [x] **Base de données** : Supabase
-- [x] **Frontend** : Angular 18
-
-## 🛠️ Stack Technique
-
-### Architecture Microservices
+## 🏗️ Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                          Frontend Angular 18                             │
-│                    (Interface Netflix + Admin Panel)                     │
 └─────────────────────────────────────────────────────────────────────────┘
                                         │
                                         ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                        Spring Boot Backend                               │
-│  ┌──────────────────────────────┬──────────────────────────────────┐   │
-│  │  TMDB Service                │  YouTube Service                 │   │
-│  │  - Récupère séries enfants   │  - Trouve vidéos YouTube        │   │
-│  └──────────────────────────────┴──────────────────────────────────┘   │
-│                                        │                                 │
-│                                        ▼                                 │
-│  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │  VideoAnalyzerService (Java) - Alternative locale                │  │
-│  │  - yt-dlp + FFmpeg (si outils installés)                        │  │
-│  │  - Analyse réelle des cuts                                       │  │
-│  └──────────────────────────────────────────────────────────────────┘  │
-│                                        │                                 │
-│                                        ▼                                 │
-│  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │  Video Analyzer Service (Python) - RECOMMANDÉ                    │  │
-│  │  - API Flask (port 5000)                                        │  │
-│  │  - PySceneDetect + FFmpeg                                       │  │
-│  │  - Métrique ASL (Average Shot Length)                           │  │
-│  └──────────────────────────────────────────────────────────────────┘  │
+│                        Spring Boot Backend (Java)                        │
+│  Orchestration: Récupère séries TMDB → Appelle service Python          │
+└─────────────────────────────────────────────────────────────────────────┘
+                                        │
+                                        ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                  Video Analyzer Service (Python)                         │
+│  - API Flask (port 5000)                                                │
+│  - PySceneDetect + FFmpeg pour détecter les cuts                        │
+│  - ASL = Durée totale / Nombre de scènes                                │
 └─────────────────────────────────────────────────────────────────────────┘
                                         │
                                         ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                     Supabase (PostgreSQL)                                │
-│                     Stockage des résultats                              │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Technologies
+## 🚀 Installation
+
+### Prérequis
+
+```bash
+# FFmpeg (pour l'analyse vidéo)
+# Ubuntu: sudo apt-get install ffmpeg
+# macOS: brew install ffmpeg
+# Windows: https://ffmpeg.org/download.html
+
+# yt-dlp (pour télécharger les vidéos YouTube)
+pip install yt-dlp
+```
+
+### Service Python (Analyse vidéo)
+
+```bash
+cd video-analyzer-service
+python3 -m venv venv
+source venv/bin/activate  # Linux/Mac
+# ou
+venv\Scripts\activate     # Windows
+
+pip install -r requirements.txt
+python api.py
+# Le service est maintenant sur http://localhost:5000
+```
+
+### Backend Spring Boot
+
+```bash
+# Dans le dossier racine
+./mvnw spring-boot:run
+# Le backend est sur http://localhost:8080
+```
+
+### Frontend Angular
+
+```bash
+cd frontend
+npm install
+ng serve
+# L'interface est sur http://localhost:4200
+```
+
+## 🔧 Utilisation
+
+### 1. Analyse d'une vidéo YouTube
+
+```bash
+curl -X POST http://localhost:5000/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"video_url": "https://www.youtube.com/watch?v=VIDEO_ID"}'
+```
+
+### 2. Scan TMDB (automatique)
+
+```bash
+curl -X POST http://localhost:8080/api/analysis/scan-tmdb
+```
+
+### 3. Interface Admin
+
+Aller sur http://localhost:4200/admin pour :
+- Lancer le scan TMDB
+- Analyser des vidéos individuelles
+- Voir les résultats
+
+## 📁 Structure du projet
+
+```
+pacingscore-core/
+├── frontend/                    # Angular 18
+├── src/main/java/               # Spring Boot Backend
+├── video-analyzer-service/      # Service Python
+│   ├── analyzer.py             # PySceneDetect + ASL
+│   ├── api.py                  # API Flask
+│   ├── tmdb_trailer_analyzer.py
+│   ├── requirements.txt
+│   └── README.md
+├── docs/                        # Documentation
+│   ├── SECURITY.md             # Politique de sécurité
+│   └── installation.md
+└── README.md
+```
+
+## 🔐 Sécurité
+
+⚠️ **IMPORTANT** : Lire `docs/SECURITY.md` avant toute contribution.
+
+- Toujours utiliser `application.properties.example` comme référence
+- Ne JAMAIS commiter de clés API
+- Utiliser les variables d'environnement en production
+- Renouveler immédiatement toute clé exposée
+
+## 📊 Technologies
 
 | Composant | Technologie | Rôle |
 |-----------|-------------|------|
-| **Backend** | Spring Boot 3 | Orchestration des services |
-| **Analyse vidéo** | Python + PySceneDetect | Détection des cuts de scène |
-| **Téléchargement** | yt-dlp | Téléchargement vidéo YouTube |
-| **Analyse image** | FFmpeg + OpenCV | Détection des changements de scène |
-| **Frontend** | Angular 18 | Interface utilisateur |
-| **BDD** | Supabase (PostgreSQL) | Persistance des données |
-| **API Films** | TMDB | Base de données des séries |
-| **API YouTube** | YouTube Data v3 | Métadonnées des vidéos
+| Backend | Spring Boot 3 | Orchestration |
+| Analyse vidéo | Python + PySceneDetect | Détection cuts |
+| Téléchargement | yt-dlp | Vidéos YouTube |
+| Analyse image | FFmpeg | Détecteur de scènes |
+| Frontend | Angular 18 | Interface |
+| BDD | Supabase (PostgreSQL) | Persistance |
+| API Films | TMDB | Base données séries |
+| API YouTube | YouTube Data v3 | Métadonnées |
+
+## 🎯 Fonctionnalités
+
+- ✅ Analyse réelle des cuts de scène avec PySceneDetect
+- ✅ Métrique ASL (Average Shot Length)
+- ✅ Score basé sur la fréquence réelle des changements
+- ✅ Récupération automatique depuis TMDB
+- ✅ Interface Netflix-like pour les parents
+- ✅ Détection d'âge recommandé (0+, 3+, 6+, 10+, 14+)
+- ✅ Stockage persistant dans Supabase
+
+## 📚 Documentation
+
+- [SECURITY.md](docs/SECURITY.md) - Politique de sécurité
+- [installation.md](docs/installation.md) - Guide d'installation
+- [video-analysis-technical-spec.md](docs/video-analysis-technical-spec.md) - Spécifications techniques
+
+## 🔗 Liens
+
+- [GitHub](https://github.com/DomiCodeur/pacing-score-core)
+- [TMDB](https://www.themoviedb.org/u/devrick)
+- [ClawHub](https://clawhub.com)
+
+---
+
+**Projet développé pour protéger la santé cognitive des enfants** 🛡️

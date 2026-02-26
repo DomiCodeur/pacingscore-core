@@ -19,7 +19,13 @@ target/
 *.env
 *credentials*
 *secret*
+*key*
+*token*
+# Les fichiers de configuration contenant des secrets
+application.properties
 **/application.properties
+!**/application.properties.example
+!**/application.properties.example.*
 
 # Python Video Analyzer
 video-analyzer-service/venv/

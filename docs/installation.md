@@ -68,7 +68,7 @@ tmdb.api.key=***REMOVED***
 tmdb.api.url=https://api.themoviedb.org/3
 
 # YouTube API Key
-youtube.apiKey=YOUTUBE_API_KEY_PLACEHOLDER
+youtube.apiKey=AIzaSyD8Rfq5Oj8flv-Y5IazqD0N2P7G7BqM7mM
 
 # Video Analyzer Configuration
 video.analyzer.temp-dir=./temp/videos
