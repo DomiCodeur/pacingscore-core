@@ -1,0 +1,27 @@
+{
+  "api": {
+    "baseUrl": "https://api.themoviedb.org/3",
+    "key": "65a5c670b9644a800c3d59f2885d4d4f",
+    "language": "fr-FR",
+    "region": "FR"
+  },
+  "images": {
+    "baseUrl": "https://image.tmdb.org/t/p",
+    "secureBaseUrl": "https://image.tmdb.org/t/p",
+    "posterSizes": ["w92", "w154", "w185", "w342", "w500", "w780", "original"],
+    "backdropSizes": ["w300", "w780", "w1280", "original"],
+    "defaultSize": {
+      "poster": "w342",
+      "backdrop": "w780"
+    }
+  },
+  "genres": {
+    "animation": 16,
+    "family": 10751
+  },
+  "defaultParams": {
+    "include_adult": false,
+    "include_video": false,
+    "sort_by": "popularity.desc"
+  }
+}

@@ -1,5 +1,7 @@
 # 🛡️ PacingScore - Kids Protection
 
+Video pacing analysis engine for children's content safety.
+
 ## 🌟 La Vision
 **PacingScore** est le "Yuka" des contenus jeunesse. L'objectif est de protéger la santé cognitive des enfants en offrant aux parents un indicateur clair sur le niveau de stimulation visuelle des dessins animés.
 
