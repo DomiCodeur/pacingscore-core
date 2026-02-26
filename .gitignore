@@ -1,0 +1,29 @@
+﻿# Node
+node_modules/
+dist/
+.angular/
+npm-debug.log
+package-lock.json
+
+# Java
+target/
+*.class
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Env
+.env
+*.env
+*credentials*
+*secret*
+**/application.properties
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Logs
+*.log
