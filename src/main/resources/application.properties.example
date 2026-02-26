@@ -6,7 +6,7 @@ supabase.key=VOTRE_CLE_SUPABASE_ICI
 tmdb.api.key=VOTRE_CLE_TMDB_ICI
 tmdb.api.url=https://api.themoviedb.org/3
 
-# YouTube API Key (pour les vidéos YouTube)
+# YouTube API Key
 youtube.apiKey=VOTRE_CLE_YOUTUBE_ICI
 
 # Application Server
