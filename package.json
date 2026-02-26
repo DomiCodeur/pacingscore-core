@@ -1,0 +1,12 @@
+{
+  "name": "pacingscore",
+  "version": "1.0.0",
+  "description": "Video pacing analysis engine for children's content safety",
+  "author": "DomiCodeur",
+  "private": true,
+  "scripts": {
+    "start": "cd frontend && ng serve",
+    "build": "cd frontend && ng build",
+    "test": "cd frontend && ng test"
+  }
+}
