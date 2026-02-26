@@ -175,6 +175,11 @@ public class TMDBService {
         private String firstAirDate;
         private String ageRating;
         private double pacingScore;
+        private int episodeCount;
+        private int seasonCount;
+        private List<String> genres = new ArrayList<>();
+        private String network;
+        private List<String> keywords = new ArrayList<>();
         
         // Getters and setters
         public int getId() { return id; }
@@ -193,5 +198,15 @@ public class TMDBService {
         public void setAgeRating(String ageRating) { this.ageRating = ageRating; }
         public double getPacingScore() { return pacingScore; }
         public void setPacingScore(double pacingScore) { this.pacingScore = pacingScore; }
+        public int getEpisodeCount() { return episodeCount; }
+        public void setEpisodeCount(int episodeCount) { this.episodeCount = episodeCount; }
+        public int getSeasonCount() { return seasonCount; }
+        public void setSeasonCount(int seasonCount) { this.seasonCount = seasonCount; }
+        public List<String> getGenres() { return genres; }
+        public void setGenres(List<String> genres) { this.genres = genres; }
+        public String getNetwork() { return network; }
+        public void setNetwork(String network) { this.network = network; }
+        public List<String> getKeywords() { return keywords; }
+        public void setKeywords(List<String> keywords) { this.keywords = keywords; }
     }
 }
