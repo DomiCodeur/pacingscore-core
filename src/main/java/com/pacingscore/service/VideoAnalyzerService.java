@@ -43,7 +43,6 @@ public class VideoAnalyzerService {
             
             if (duration < 30) {
                 // Vidéo trop courte pour une analyse fiable
-                result.setCutFrequency(0);
                 result.setCutsPerMinute(0);
                 result.setPacingScore(0); // Très mauvais
                 cleanup(videoPath);

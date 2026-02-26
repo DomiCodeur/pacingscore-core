@@ -11,6 +11,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.pacingscore.service.TMDBService.ShowInfo;
+
 @Service
 public class TMDBScannerService {
     

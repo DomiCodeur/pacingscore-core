@@ -18,8 +18,9 @@ public class YouTubeCrawlerService {
     @Autowired
     private YouTubeConfig youtubeConfig;
     
-    @Autowired
-    private AnalysisService analysisService;
+    // AnalysisService a été remplacé par VideoAnalyzerService
+    // @Autowired
+    // private AnalysisService analysisService;
     
     private final RestTemplate restTemplate = new RestTemplate();
     
