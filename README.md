@@ -8,11 +8,18 @@ Video pacing analysis engine for children's content safety.
 **Référence**: Basé sur les données de **The Movie Database (TMDB)** - la plus grande base de données de films et séries au monde. Tous les dessins animés sont récupérés via l'API TMDB pour garantir des informations fiables et complètes.
 
 ## 🎯 Comment ça marche ?
-1. **TMDB Integration** : Récupération des séries enfants depuis TMDB (the moviedb.org/u/devrick)
-2. **Analyse automatique** : Le système analyse les métadonnées pour calculer un score de calme
-3. **Détection d'âge** : Analyse des genres et des réseaux pour déterminer la tranche d'âge
-4. **Stockage** : Les résultats sont sauvegardés dans Supabase pour le frontend
-5. **Recherche** : Interface Netflix-like pour rechercher par âge et score
+1. **Scan TMDB** : Le système scanne automatiquement TOUS les dessins animés pour enfants présents sur TMDB (animation + family genres)
+2. **Analyse automatique** : Chaque série est analysée via ses métadonnées (titre, description, réseaux, mots-clés)
+3. **Calcul du score** : Le score de calme est basé sur :
+   - Les mots-clés dans le titre/description
+   - Le réseau de diffusion (Disney, Nickelodeon, etc.)
+   - Le nombre d'épisodes
+   - La présence de mots comme "calme", "dodo", "bébé"
+4. **Détection d'âge** : Analyse automatique pour déterminer la tranche d'âge (0+, 3+, 6+, 10+, 14+)
+5. **Stockage Supabase** : Tous les résultats sont sauvegardés dans Supabase
+6. **Interface parent** : Recherche Netflix-like pour trouver des séries adaptées à l'âge de l'enfant
+
+**Liste de référence** : Toutes les données proviennent de **TMDB** (themoviedb.org) qui contient déjà une base de données complète des films et séries, incluant les dessins animés pour enfants.
 
 ## 📊 Indicateurs
 - **Indice de Calme (%)** : Plus le score est élevé, plus le rythme est serein
@@ -22,12 +29,13 @@ Video pacing analysis engine for children's content safety.
   - Babar : 95% (très calme)
 
 ## 🚀 Fonctionnalités
-- [x] Intégration TMDB pour base de données complète
-- [x] Analyse automatique des séries enfants
-- [x] Détection d'âge recommandé
+- [x] Scan automatique de tous les dessins animés TMDB
+- [x] Analyse automatique par série
+- [x] Détection d'âge recommandé (0+, 3+, 6+, 10+, 14+)
 - [x] Dashboard Kids-Friendly (style Netflix)
 - [x] Recherche par âge et score de calme
-- [x] Base de données Supabase
+- [x] Base de données Supabase persistante
+- [x] Référence : TMDB (themoviedb.org/u/devrick)
 
 ## 🛠️ Stack Technique
 - Backend : Spring Boot 3

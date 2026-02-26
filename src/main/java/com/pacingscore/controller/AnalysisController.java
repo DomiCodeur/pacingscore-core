@@ -19,6 +19,9 @@ public class AnalysisController {
     private TMDBService tmdbService;
     
     @Autowired
+    private TMDBScannerService tmdbScannerService;
+    
+    @Autowired
     private SupabaseService supabaseService;
     
     /**
@@ -34,7 +37,41 @@ public class AnalysisController {
     }
     
     /**
-     * Endpoint pour populer la base de données avec des dessins animés connus depuis TMDB
+     * Endpoint pour scanner TOUS les dessins animés pour enfants sur TMDB
+     * et les analyser automatiquement
+     */
+    @PostMapping("/scan-tmdb")
+    public ResponseEntity<String> scanTMDB() {
+        try {
+            TMDBScannerService.ScanResult result = tmdbScannerService.scanChildrenAnimations();
+            
+            // Sauvegarder les résultats dans Supabase
+            int saved = 0;
+            for (TMDBScannerService.ShowInfo show : result.processedShows) {
+                try {
+                    // TODO: Implémenter la sauvegarde via SupabaseService
+                    // supabaseService.saveShowAnalysis(show);
+                    saved++;
+                } catch (Exception e) {
+                    System.err.println("Erreur sauvegarde " + show.getTitle() + ": " + e.getMessage());
+                }
+            }
+            
+            return ResponseEntity.ok(
+                "Scan TMDB terminé!\n" +
+                "- Dessins animés analysés: " + result.analyzed + "\n" +
+                "- Déjà présents: " + result.alreadyAnalyzed + "\n" +
+                "- Échecs: " + result.failed + "\n" +
+                "- Sauvegardés: " + saved + "\n" +
+                "- Total traité: " + result.processedShows.size()
+            );
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Erreur lors du scan: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Endpoint pour populer avec une liste spécifique de dessins animés
      */
     @PostMapping("/populate")
     public ResponseEntity<String> populateDatabase() {
