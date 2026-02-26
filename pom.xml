@@ -26,11 +26,13 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
+        <!-- Pour le parsing JSON -->
         <dependency>
-            <groupId>io.github.jooby</groupId>
-            <artifactId>jooby-supabase</artifactId>
-            <version>3.0.0</version>
+            <groupId>org.json</groupId>
+            <artifactId>json</artifactId>
+            <version>20240303</version>
         </dependency>
+        <!-- Pour les appels HTTP -->
         <dependency>
             <groupId>com.squareup.okhttp3</groupId>
             <artifactId>okhttp</artifactId>

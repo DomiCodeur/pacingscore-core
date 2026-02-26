@@ -1,6 +1,11 @@
 package com.pacingscore.controller;
 
 import com.pacingscore.service.YouTubeCrawlerService;
+import com.pacingscore.service.TMDBService;
+import com.pacingscore.service.TMDBScannerService;
+import com.pacingscore.service.SupabaseService;
+import com.pacingscore.service.TMDBScannerService.ScanResult;
+import com.pacingscore.service.TMDBService.ShowInfo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.http.ResponseEntity;
@@ -47,7 +52,7 @@ public class AnalysisController {
             
             // Sauvegarder les résultats dans Supabase
             int saved = 0;
-            for (TMDBScannerService.ShowInfo show : result.processedShows) {
+            for (ShowInfo show : result.processedShows) {
                 try {
                     // TODO: Implémenter la sauvegarde via SupabaseService
                     // supabaseService.saveShowAnalysis(show);

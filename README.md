@@ -230,9 +230,9 @@ pacingscore-core/
 
 ## 🔗 Liens
 
-- [GitHub](https://github.com/DomiCodeur/pacing-score-core)
+- [GitHub](https://github.com/DomiCodeur/pacingscore-core)
 - [TMDB](https://www.themoviedb.org/u/devrick)
-- [ClawHub](https://clawhub.com)
+
 
 ---
 
