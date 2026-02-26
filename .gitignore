@@ -21,6 +21,14 @@ target/
 *secret*
 **/application.properties
 
+# Python Video Analyzer
+video-analyzer-service/venv/
+video-analyzer-service/__pycache__/
+video-analyzer-service/*.pyc
+video-analyzer-service/temp/
+video-analyzer-service/*.mp4
+video-analyzer-service/analysis_results.json
+
 # Windows
 Thumbs.db
 Desktop.ini

@@ -87,16 +87,85 @@ Règles :
   - Babar : 95% (très calme)
 
 ## 🚀 Fonctionnalités
-- [x] Scan automatique de tous les dessins animés TMDB
-- [x] Analyse automatique par série
-- [x] Détection d'âge recommandé (0+, 3+, 6+, 10+, 14+)
+
+### Analyse Vidéo Réelle (ASL - Average Shot Length)
+- [x] **Analyse des cuts de scène** avec PySceneDetect + FFmpeg
+- [x] **Métrique ASL** : Durée moyenne des plans en secondes
+- [x] **Scoring objectif** : Basé sur la fréquence réelle des changements de scène
+- [x] **Analyse des trailers** : Utilise les bandes-annonces YouTube depuis TMDB
+- [x] **Service Python** : Micro-service indépendant pour l'analyse vidéo
+
+### Pipeline Complet
+- [x] **Récupération TMDB** : Séries Animation + Family
+- [x] **Téléchargement** : yt-dlp télécharge 2 minutes de vidéo
+- [x] **Détection** : FFmpeg détecte les scènes avec seuil ajustable
+- [x] **Calcul ASL** : `Durée totale / Nombre de scènes`
+- [x] **Score** : `100 - (facteur × ASL bas)`
+- [x] **Stockage** : Supabase pour persistance
+
+### Interface
 - [x] Dashboard Kids-Friendly (style Netflix)
 - [x] Recherche par âge et score de calme
-- [x] Base de données Supabase persistante
-- [x] Référence : TMDB (themoviedb.org/u/devrick)
+- [x] Détection d'âge recommandé (0+, 3+, 6+, 10+, 14+)
+- [x] Évaluation détaillée des séries
+
+### Technologies
+- [x] **Backend** : Spring Boot 3 + Java 17
+- [x] **Analyse vidéo** : Python + PySceneDetect + FFmpeg
+- [x] **Téléchargement** : yt-dlp
+- [x] **Base de données** : Supabase
+- [x] **Frontend** : Angular 18
 
 ## 🛠️ Stack Technique
-- Backend : Spring Boot 3
-- Frontend : Angular 18
-- Database : Supabase
-- API Films/Séries : **The Movie Database (TMDB)**
+
+### Architecture Microservices
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          Frontend Angular 18                             │
+│                    (Interface Netflix + Admin Panel)                     │
+└─────────────────────────────────────────────────────────────────────────┘
+                                        │
+                                        ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        Spring Boot Backend                               │
+│  ┌──────────────────────────────┬──────────────────────────────────┐   │
+│  │  TMDB Service                │  YouTube Service                 │   │
+│  │  - Récupère séries enfants   │  - Trouve vidéos YouTube        │   │
+│  └──────────────────────────────┴──────────────────────────────────┘   │
+│                                        │                                 │
+│                                        ▼                                 │
+│  ┌──────────────────────────────────────────────────────────────────┐  │
+│  │  VideoAnalyzerService (Java) - Alternative locale                │  │
+│  │  - yt-dlp + FFmpeg (si outils installés)                        │  │
+│  │  - Analyse réelle des cuts                                       │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+│                                        │                                 │
+│                                        ▼                                 │
+│  ┌──────────────────────────────────────────────────────────────────┐  │
+│  │  Video Analyzer Service (Python) - RECOMMANDÉ                    │  │
+│  │  - API Flask (port 5000)                                        │  │
+│  │  - PySceneDetect + FFmpeg                                       │  │
+│  │  - Métrique ASL (Average Shot Length)                           │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────┘
+                                        │
+                                        ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                     Supabase (PostgreSQL)                                │
+│                     Stockage des résultats                              │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Technologies
+
+| Composant | Technologie | Rôle |
+|-----------|-------------|------|
+| **Backend** | Spring Boot 3 | Orchestration des services |
+| **Analyse vidéo** | Python + PySceneDetect | Détection des cuts de scène |
+| **Téléchargement** | yt-dlp | Téléchargement vidéo YouTube |
+| **Analyse image** | FFmpeg + OpenCV | Détection des changements de scène |
+| **Frontend** | Angular 18 | Interface utilisateur |
+| **BDD** | Supabase (PostgreSQL) | Persistance des données |
+| **API Films** | TMDB | Base de données des séries |
+| **API YouTube** | YouTube Data v3 | Métadonnées des vidéos
