@@ -15,6 +15,12 @@ public class AnalysisController {
     @Autowired
     private YouTubeCrawlerService crawlerService;
     
+    @Autowired
+    private TMDBService tmdbService;
+    
+    @Autowired
+    private SupabaseService supabaseService;
+    
     /**
      * Endpoint pour démarrer l'analyse automatique
      * Recherche et analyse des vidéos YouTube
@@ -28,71 +34,41 @@ public class AnalysisController {
     }
     
     /**
-     * Endpoint pour populer la base de données avec des dessins animés connus
+     * Endpoint pour populer la base de données avec des dessins animés connus depuis TMDB
      */
     @PostMapping("/populate")
     public ResponseEntity<String> populateDatabase() {
-        // Liste PRÉDÉFINIE de dessins animés connus (pas de recherche random)
-        String[] cartoonTitles = {
-            // Très calmes - Pour tout-petits
-            "baby shark full episode",
-            "cocomelon nursery rhymes",
-            "super simple songs",
-            "baby einstein collection",
-            "bebu loulou grammont",
-            "loulou de grammont dessin animé",
-            "petit lapin blanc",
-            "winnie the pooh",
-            "berenstain bears",
-            "barbapapa",
+        try {
+            // Récupérer les séries enfants depuis TMDB
+            List<TMDBService.ShowInfo> shows = tmdbService.searchChildrenCartoons();
             
-            // Calmes - Pour jeunes enfants
-            "peppa pig full episodes",
-            "bluey full episodes",
-            "paw patrol full episodes",
-            "dora the explorer",
-            "spidey and his amazing friends",
-            "miffy dessin animé",
-            "sesame street episodes",
-            "blue's clues full episodes",
-            "totoro ghibli",
-            "my neighbor totoro",
+            // Filtrer et sauvegarder dans Supabase
+            int saved = 0;
+            int skipped = 0;
             
-            // Modérés - Pour enfants plus grands
-            "pokémon episodes",
-            "diego et les explorateurs",
-            "dinosaur train episodes",
-            "thomas the tank engine",
-            "mickey mouse clubhouse",
-            "prince de la saveur",
-            "la grande séquence",
-            
-            // Français
-            "astérix et obélix dessin animé",
-            "tintin dessin animé",
-            "pimpin et le lapin",
-            
-            // Disney
-            "snow white full movie",
-            "lion king full movie",
-            "pocahontas full movie",
-            "kiki's delivery service",
-            "spirited away"
-        };
-        
-        int processed = 0;
-        for (String cartoon : cartoonTitles) {
-            try {
-                System.out.println("Analyzing: " + cartoon);
-                crawlerService.crawlAndAnalyze(cartoon);
-                Thread.sleep(2000); // Attendre 2s entre les requêtes pour ne pas surcharger
-                processed++;
-            } catch (Exception e) {
-                System.err.println("Erreur pour " + cartoon + ": " + e.getMessage());
+            for (TMDBService.ShowInfo show : shows) {
+                // Vérifier si la série existe déjà
+                if (!supabaseService.showExists(show.getId())) {
+                    try {
+                        supabaseService.saveShowAnalysis(show);
+                        saved++;
+                        Thread.sleep(500); // Pause pour respecter les limites d'API
+                    } catch (Exception e) {
+                        System.err.println("Erreur pour " + show.getTitle() + ": " + e.getMessage());
+                        skipped++;
+                    }
+                } else {
+                    skipped++;
+                    System.out.println("Déjà présent: " + show.getTitle());
+                }
             }
+            
+            return ResponseEntity.ok(
+                "Base de données popuulée avec " + saved + " nouvelles séries enfants de TMDB (déjà présentes: " + skipped + ")"
+            );
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Erreur: " + e.getMessage());
         }
-        
-        return ResponseEntity.ok("Base de données popuulée avec " + processed + " dessins animés connus");
     }
     
     /**
