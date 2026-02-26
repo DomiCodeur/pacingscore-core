@@ -39,6 +39,7 @@ tmdb.api.key=VOTRE_CLE_TMDB
 #### YouTube Data API v3
 - Aller sur https://console.cloud.google.com/
 - Créer un projet et activer YouTube Data API v3
+- Créer une clé API
 - Ajouter dans `application.properties`:
 ```
 youtube.apiKey=VOTRE_CLE_YOUTUBE
@@ -61,14 +62,14 @@ supabase.key=VOTRE_CLE_SUPABASE
 ```properties
 # Supabase Configuration
 supabase.url=https://gjkwsrzmaecmtfozkwmw.supabase.co
-supabase.key=sb_publishable_2vEhYPJjXxrqyZRbYU2kSg_20NSSJ2t
+supabase.key=VOTRE_CLE_SUPABASE_ICI
 
 # TMDB Configuration
-tmdb.api.key=65a5c670b9644a800c3d59f2885d4d4f
+tmdb.api.key=VOTRE_CLE_TMDB_ICI
 tmdb.api.url=https://api.themoviedb.org/3
 
 # YouTube API Key
-youtube.apiKey=AIzaSyD8Rfq5Oj8flv-Y5IazqD0N2P7G7BqM7mM
+youtube.apiKey=VOTRE_CLE_YOUTUBE_ICI
 
 # Video Analyzer Configuration
 video.analyzer.temp-dir=./temp/videos
@@ -82,49 +83,6 @@ spring.application.name=pacingscore
 logging.level.com.pacingscore=DEBUG
 ```
 
-### Schema Supabase
-
-Exécuter dans l'éditeur SQL Supabase :
-
-```sql
-CREATE TABLE video_analyses (
-    id BIGSERIAL PRIMARY KEY,
-    video_id INTEGER UNIQUE,
-    title TEXT NOT NULL,
-    description TEXT,
-    thumbnail_url TEXT,
-    video_url TEXT,
-    pacing_score FLOAT,
-    age_rating VARCHAR(10),
-    duration_minutes INTEGER,
-    cuts_per_minute FLOAT,
-    total_cuts INTEGER,
-    tmdb_id INTEGER,
-    tmdb_data JSONB,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Index pour la recherche
-CREATE INDEX idx_video_analyses_pacing_score ON video_analyses(pacing_score DESC);
-CREATE INDEX idx_video_analyses_age_rating ON video_analyses(age_rating);
-CREATE INDEX idx_video_analyses_title ON video_analyses(title);
-
--- Vue pour les recommandations
-CREATE OR REPLACE VIEW video_recommendations AS
-SELECT 
-    *,
-    CASE 
-        WHEN pacing_score >= 90 THEN 'Très calme - Parfait pour les tout-petits'
-        WHEN pacing_score >= 70 THEN 'Calme - Bon rythme adapté'
-        WHEN pacing_score >= 50 THEN 'Modéré - À surveiller'
-        WHEN pacing_score >= 30 THEN 'Stimulant - Attention au rythme'
-        ELSE 'Très stimulant - Peut être trop intense'
-    END AS pacing_label
-FROM video_analyses
-ORDER BY pacing_score DESC, created_at DESC;
-```
-
 ## Démarrage
 
 ### 1. Backend Spring Boot
@@ -136,7 +94,22 @@ cd pacingscore-clean
 
 Le backend sera accessible sur http://localhost:8080
 
-### 2. Frontend Angular
+### 2. Service Python (Optionnel - Recommandé)
+
+```bash
+cd video-analyzer-service
+python3 -m venv venv
+source venv/bin/activate  # Linux/Mac
+# ou
+venv\Scripts\activate     # Windows
+
+pip install -r requirements.txt
+python api.py
+```
+
+Le service sera accessible sur http://localhost:5000
+
+### 3. Frontend Angular
 
 ```bash
 cd frontend
@@ -148,92 +121,36 @@ Le frontend sera accessible sur http://localhost:4200
 
 ## Utilisation
 
-### 1. Analyse d'une vidéo spécifique
+### Analyser une vidéo via l'API Python
 
 ```bash
-POST /api/video-analysis/analyze
+curl -X POST http://localhost:5000/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"video_url": "https://www.youtube.com/watch?v=VIDEO_ID"}'
 ```
 
-Paramètre :
-- `videoUrl` : URL YouTube de la vidéo à analyser
-
-Exemple :
-```bash
-curl -X POST "http://localhost:8080/api/video-analysis/analyze?videoUrl=https://www.youtube.com/watch?v=VIDEO_ID"
-```
-
-### 2. Scan automatique des dessins animés TMDB
+### Scan automatique des dessins animés
 
 ```bash
-POST /api/analysis/scan-tmdb
+curl -X POST http://localhost:8080/api/analysis/scan-tmdb
 ```
 
-Ce endpoint scanne les dessins animés pour enfants sur TMDB et :
-- Télécharge les premières 5 minutes
-- Analyse les cuts de scène avec FFmpeg
-- Calcule le score de calme
-- Sauvegarde dans Supabase
-
-### 3. Interface Admin
+### Interface Admin
 
 Aller sur http://localhost:4200/admin
 
-## Limitations
+## Variables d'environnement (Production)
 
-### Espace disque
-- Chaque analyse télécharge ~5-10MB de vidéo temporaire
-- Le nettoyage est automatique mais nécessite de l'espace disponible
-- Recommandation : 10GB d'espace libre minimum
-
-### Performance
-- Analyse d'une vidéo : ~30-60 secondes
-- Scan complet TMDB : plusieurs heures (dépend du nombre de séries)
-- Limite d'API YouTube : 10 000 requêtes/jour (gratuit)
-
-### Légalité
-- yt-dlp respecte les conditions d'utilisation YouTube
-- Téléchargement limité à des fins d'analyse non commerciale
-- Pour usage commercial, consulter un avocat
-
-## Problèmes courants
-
-### yt-dlp non trouvé
-```bash
-# Vérifier l'installation
-yt-dlp --version
-
-# Ajouter au PATH si nécessaire
-export PATH=$PATH:/chemin/vers/yt-dlp
-```
-
-### FFmpeg non trouvé
-```bash
-# Vérifier l'installation
-ffmpeg -version
-
-# Ajouter au PATH
-export PATH=$PATH:/chemin/vers/ffmpeg
-```
-
-### Erreurs YouTube API
-- Vérifier que votre clé API est valide
-- Vérifier que l'API YouTube Data v3 est activée
-- Vérifier les quotas (10 000 requêtes/jour gratuit)
-
-## Déploiement
-
-### Variables d'environnement
-
-Pour la production, utilisez les variables d'environnement au lieu de `application.properties` :
+Pour le déploiement, utilisez les variables d'environnement :
 
 ```bash
-export SUPABASE_URL=https://...
-export SUPABASE_KEY=...
-export TMDB_API_KEY=...
-export YOUTUBE_API_KEY=...
+export SUPABASE_URL=https://gjkwsrzmaecmtfozkwmw.supabase.co
+export SUPABASE_KEY=votre_cle_supabase
+export TMDB_API_KEY=votre_cle_tmdb
+export YOUTUBE_API_KEY=votre_cle_youtube
 ```
 
-### Docker
+## Docker
 
 ```dockerfile
 FROM openjdk:17-jdk-slim
@@ -248,10 +165,3 @@ EXPOSE 8080
 
 CMD ["java", "-jar", "app.jar"]
 ```
-
-### Services cloud
-
-- **Google Cloud** : VM avec FFmpeg et yt-dlp
-- **AWS** : EC2 instance avec les outils installés
-- **Heroku** : Pas idéal (limites d'espace et de temps)
-- **DigitalOcean** : Droplet recommandé (1GB RAM minimum)

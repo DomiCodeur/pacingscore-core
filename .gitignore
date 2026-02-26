@@ -16,6 +16,9 @@ target/
 
 # Env
 .env
+.env.local
+.env.development
+.env.production
 *.env
 *credentials*
 *secret*

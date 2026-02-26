@@ -1,13 +1,24 @@
+# Configuration PacingScore - Fichier d'exemple
+# ⚠️ CRITIQUE : Créer un fichier application.properties local avec vos clés
+# ⚠️ CE FICHIER NE CONTIENT PAS DE CLÉS SENSIBLES
+
 # Supabase Configuration
+# Aller sur https://supabase.com/ pour créer votre projet
 supabase.url=https://gjkwsrzmaecmtfozkwmw.supabase.co
 supabase.key=VOTRE_CLE_SUPABASE_ICI
 
 # TMDB Configuration (The Movie Database)
+# Aller sur https://www.themoviedb.org/settings/api
 tmdb.api.key=VOTRE_CLE_TMDB_ICI
 tmdb.api.url=https://api.themoviedb.org/3
 
 # YouTube API Key
+# Aller sur https://console.cloud.google.com/apis/credentials
 youtube.apiKey=VOTRE_CLE_YOUTUBE_ICI
+
+# Video Analyzer Configuration
+video.analyzer.temp-dir=./temp/videos
+video.analyzer.max-duration=300
 
 # Application Server
 server.port=8080
