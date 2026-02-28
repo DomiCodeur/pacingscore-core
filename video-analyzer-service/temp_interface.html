@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PacingScore - Analyse de Pacing Vidéo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 30px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+        }
+        
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            background: linear-gradient(90deg, #00d4ff, #00ff88);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .subtitle {
+            color: #aaa;
+            font-size: 1.1em;
+        }
+        
+        .card {
+            background: rgba(255,255,255,0.08);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0,212,255,0.2);
+        }
+        
+        .card-title {
+            font-size: 1.3em;
+            margin-bottom: 15px;
+            color: #00d4ff;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        input, textarea {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid rgba(255,255,255,0.2);
+            border-radius: 8px;
+            background: rgba(255,255,255,0.05);
+            color: #fff;
+            font-size: 1em;
+            margin-bottom: 15px;
+            transition: border-color 0.3s;
+        }
+        
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #00d4ff;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #ccc;
+            font-weight: 500;
+        }
+        
+        button {
+            background: linear-gradient(90deg, #00d4ff, #00ff88);
+            color: #000;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            width: 100%;
+        }
+        
+        button:hover {
+            transform: scale(1.02);
+            box-shadow: 0 5px 20px rgba(0,212,255,0.4);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .results {
+            margin-top: 20px;
+        }
+        
+        .result-card {
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+        }
+        
+        .score-display {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            margin: 20px 0;
+            gap: 20px;
+        }
+        
+        .score-item {
+            text-align: center;
+            padding: 15px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 10px;
+            flex: 1;
+        }
+        
+        .score-value {
+            font-size: 2.5em;
+            font-weight: 700;
+            margin: 10px 0;
+        }
+        
+        .score-label {
+            font-size: 0.9em;
+            color: #aaa;
+        }
+        
+        .rating {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9em;
+        }
+        
+        .rating-very-stimulant { background: #ff4757; color: white; }
+        .rating-stimulant { background: #ff7f50; color: white; }
+        .rating-moderate { background: #ffa502; color: black; }
+        .rating-calm { background: #2ed573; color: black; }
+        .rating-very-calm { background: #00d4ff; color: black; }
+        
+        .comparison-chart {
+            display: flex;
+            align-items: flex-end;
+            gap: 20px;
+            height: 200px;
+            margin: 20px 0;
+            padding: 20px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 10px;
+        }
+        
+        .bar-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100%;
+        }
+        
+        .bar {
+            width: 80%;
+            border-radius: 5px 5px 0 0;
+            transition: height 0.5s ease;
+            min-height: 10px;
+        }
+        
+        .bar-label {
+            margin-top: 10px;
+            font-size: 0.9em;
+            text-align: center;
+        }
+        
+        .scene-timeline {
+            position: relative;
+            height: 30px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 5px;
+            margin: 15px 0;
+            overflow: hidden;
+        }
+        
+        .scene-block {
+            position: absolute;
+            height: 100%;
+            background: linear-gradient(90deg, #00d4ff, #00ff88);
+            opacity: 0.8;
+            border-right: 1px solid #000;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #00d4ff;
+        }
+        
+        .error {
+            background: rgba(255,71,87,0.2);
+            border: 1px solid #ff4757;
+            padding: 15px;
+            border-radius: 8px;
+            color: #ff4757;
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .tab {
+            padding: 10px 20px;
+            background: rgba(255,255,255,0.1);
+            border: none;
+            color: #aaa;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+        
+        .tab.active {
+            background: linear-gradient(90deg, #00d4ff, #00ff88);
+            color: #000;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        
+        @media (max-width: 768px) {
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+            
+            .score-display {
+                flex-direction: column;
+            }
+        }
+        
+        .history-item {
+            padding: 10px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 5px;
+            margin-bottom: 8px;
+            font-size: 0.9em;
+        }
+        
+        .history-item strong {
+            color: #00d4ff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎬 PacingScore</h1>
+            <p class="subtitle">Analyse de rythme vidéo pour parents</p>
+        </header>
+        
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('analyze')">Analyser</button>
+            <button class="tab" onclick="switchTab('compare')">Comparer</button>
+            <button class="tab" onclick="switchTab('history')">Historique</button>
+        </div>
+        
+        <!-- Onglet Analyse -->
+        <div id="analyze-tab" class="tab-content active">
+            <div class="card">
+                <h2 class="card-title">📊 Analyser une vidéo YouTube</h2>
+                <form id="analyze-form">
+                    <label>URL de la vidéo YouTube</label>
+                    <input type="url" id="video-url" placeholder="https://www.youtube.com/watch?v=..." required>
+                    
+                    <div class="grid-2">
+                        <div>
+                            <label>Durée max (secondes)</label>
+                            <input type="number" id="max-duration" value="120" min="30" max="600">
+                        </div>
+                        <div>
+                            <label>Options avancées</label>
+                            <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 5px;">
+                                <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                                    <input type="checkbox" id="analyze-motion" style="width: auto; margin: 0;">
+                                    Mouvement
+                                </label>
+                                <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                                    <input type="checkbox" id="analyze-flashes" checked style="width: auto; margin: 0;">
+                                    Flashs
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" id="analyze-btn">Lancer l'analyse</button>
+                </form>
+                
+                <div id="analyze-results" class="results"></div>
+            </div>
+        </div>
+        
+        <!-- Onglet Comparaison -->
+        <div id="compare-tab" class="tab-content">
+            <div class="card">
+                <h2 class="card-title">⚖️ Comparer deux vidéos</h2>
+                <form id="compare-form">
+                    <div class="grid-2">
+                        <div>
+                            <label>Video 1 (référence)</label>
+                            <input type="url" id="video1-url" placeholder="https://www.youtube.com/watch?v=..." required>
+                            <input type="text" id="video1-name" placeholder="Nom (ex: Puffin Rock)">
+                        </div>
+                        <div>
+                            <label>Video 2 (à comparer)</label>
+                            <input type="url" id="video2-url" placeholder="https://www.youtube.com/watch?v=..." required>
+                            <input type="text" id="video2-name" placeholder="Nom (ex: Cocomelon)">
+                        </div>
+                    </div>
+                    
+                    <button type="submit" id="compare-btn">Comparer</button>
+                </form>
+                
+                <div id="compare-results" class="results"></div>
+            </div>
+        </div>
+        
+        <!-- Onglet Historique -->
+        <div id="history-tab" class="tab-content">
+            <div class="card">
+                <h2 class="card-title">📜 Historique des analyses</h2>
+                <div id="history-results" class="results">
+                    <p style="text-align: center; color: #aaa; padding: 20px;">
+                        Chargement de l'historique...
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Gestion des onglets
+        function switchTab(tabName) {
+            // Mettre à jour les boutons
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            // Afficher le contenu correspondant
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(tabName + '-tab').classList.add('active');
+            
+            // Charger l'historique si nécessaire
+            if (tabName === 'history') {
+                loadHistory();
+            }
+        }
+        
+        // Analyser une vidéo
+        document.getElementById('analyze-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const url = document.getElementById('video-url').value;
+            const maxDuration = document.getElementById('max-duration').value;
+            const analyzeMotion = document.getElementById('analyze-motion').checked;
+            const analyzeFlashes = document.getElementById('analyze-flashes').checked;
+            const btn = document.getElementById('analyze-btn');
+            
+            btn.disabled = true;
+            btn.textContent = 'Analyse en cours...';
+            
+            const resultsDiv = document.getElementById('analyze-results');
+            resultsDiv.innerHTML = '<div class="loading">⏳ Analyse en cours... (cela peut prendre quelques minutes)</div>';
+            
+            try {
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        video_url: url,
+                        max_duration: parseInt(maxDuration),
+                        analyze_motion: analyzeMotion,
+                        analyze_flashes: analyzeFlashes
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    displayAnalyzeResults(result);
+                } else {
+                    resultsDiv.innerHTML = `<div class="error">❌ Erreur: ${result.error}</div>`;
+                }
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="error">❌ Erreur réseau: ${error.message}</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "Lancer l'analyse";
+            }
+        });
+        
+        function displayAnalyzeResults(result) {
+            const eval_label = result.composite_evaluation?.label || 'N/A';
+            const eval_desc = result.composite_evaluation?.description || '';
+            const eval_color = result.composite_evaluation?.color || 'moderate';
+            
+            let ratingClass = 'rating-moderate';
+            if (eval_label.includes('STIMULANT')) ratingClass = 'rating-very-stimulant';
+            else if (eval_label.includes('CALME')) ratingClass = 'rating-very-calm';
+            else if (eval_label.includes('MODÉRÉ')) ratingClass = 'rating-moderate';
+            
+            const html = `
+                <div class="result-card">
+                    <h3>Résultats de l'analyse</h3>
+                    
+                    <div class="score-display">
+                        <div class="score-item">
+                            <div class="score-label">Score Composite</div>
+                            <div class="score-value" style="color: #00d4ff;">${result.composite_score}</div>
+                            <span class="rating ${ratingClass}">${eval_label}</span>
+                        </div>
+                        <div class="score-item">
+                            <div class="score-label">Score Historique</div>
+                            <div class="score-value">${result.pacing_score}</div>
+                            <div class="score-label">${result.evaluation?.label || 'N/A'}</div>
+                        </div>
+                        <div class="score-item">
+                            <div class="score-label">ASL (sec/plan)</div>
+                            <div class="score-value">${result.average_shot_length}</div>
+                            <div class="score-label">${result.num_scenes} scènes</div>
+                        </div>
+                    </div>
+                    
+                    <p style="margin: 15px 0; color: #ccc;">${eval_desc}</p>
+                    
+                    ${result.motion_analysis ? `
+                        <div style="margin: 15px 0;">
+                            <strong>Mouvement:</strong> ${result.motion_analysis.motion_intensity}/100 
+                            (${result.motion_analysis.level})
+                        </div>
+                    ` : ''}
+                    
+                    ${result.flash_analysis ? `
+                        <div style="margin: 15px 0;">
+                            <strong>Flashs:</strong> ${result.flash_analysis.flashes} détectés
+                            ${result.flash_analysis.black_frames > 0 ? ` • Frames noirs: ${result.flash_analysis.black_frames}` : ''}
+                        </div>
+                    ` : ''}
+                    
+                    ${result.scene_details && result.scene_details.length > 0 ? `
+                        <div style="margin-top: 20px;">
+                            <strong>Timeline des scènes (${Math.round(result.video_duration)}s):</strong>
+                            <div class="scene-timeline">
+                                ${result.scene_details.map(scene => {
+                                    const left = (scene.start / result.video_duration) * 100;
+                                    const width = ((scene.end - scene.start) / result.video_duration) * 100;
+                                    return `<div class="scene-block" style="left: ${left}%; width: ${width}%;" title="${scene.duration}s"></div>`;
+                                }).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+            
+            document.getElementById('analyze-results').innerHTML = html;
+        }
+        
+        // Comparer deux vidéos
+        document.getElementById('compare-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const url1 = document.getElementById('video1-url').value;
+            const name1 = document.getElementById('video1-name').value || 'Vidéo 1';
+            const url2 = document.getElementById('video2-url').value;
+            const name2 = document.getElementById('video2-name').value || 'Vidéo 2';
+            const btn = document.getElementById('compare-btn');
+            
+            btn.disabled = true;
+            btn.textContent = 'Comparaison en cours...';
+            
+            const resultsDiv = document.getElementById('compare-results');
+            resultsDiv.innerHTML = '<div class="loading">⏳ Comparaison en cours... (cela peut prendre quelques minutes)</div>';
+            
+            try {
+                const response = await fetch('/compare', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        video1_url: url1,
+                        video2_url: url2,
+                        name1: name1,
+                        name2: name2
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    displayCompareResults(result);
+                } else {
+                    resultsDiv.innerHTML = `<div class="error">❌ Erreur: ${result.error}</div>`;
+                }
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="error">❌ Erreur réseau: ${error.message}</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Comparer';
+            }
+        });
+        
+        function displayCompareResults(result) {
+            const comp = result.comparison;
+            const v1 = comp.video1;
+            const v2 = comp.video2;
+            const diff = comp.differences;
+            
+            // Calculer les hauteurs relatives pour le graphique
+            const maxScore = Math.max(v1.pacing_score, v2.pacing_score);
+            const height1 = (v1.pacing_score / maxScore) * 150;
+            const height2 = (v2.pacing_score / maxScore) * 150;
+            
+            // Couleurs basées sur le score
+            const getColor = (score) => {
+                if (score < 30) return '#ff4757';
+                if (score < 50) return '#ff7f50';
+                if (score < 70) return '#ffa502';
+                if (score < 85) return '#2ed573';
+                return '#00d4ff';
+            };
+            
+            const html = `
+                <div class="result-card">
+                    <h3>Résultats de la comparaison</h3>
+                    
+                    <div class="comparison-chart">
+                        <div class="bar-container">
+                            <div class="bar" style="height: ${height1}px; background: ${getColor(v1.pacing_score)};"></div>
+                            <div class="bar-label">
+                                <strong>${v1.name}</strong><br>
+                                Score: ${v1.pacing_score}<br>
+                                ASL: ${v1.asl}s
+                            </div>
+                        </div>
+                        <div class="bar-container">
+                            <div class="bar" style="height: ${height2}px; background: ${getColor(v2.pacing_score)};"></div>
+                            <div class="bar-label">
+                                <strong>${v2.name}</strong><br>
+                                Score: ${v2.pacing_score}<br>
+                                ASL: ${v2.asl}s
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="margin: 20px 0; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 8px;">
+                        <strong>Différences:</strong><br>
+                        • ASL différence: ${diff.asl_diff > 0 ? '+' : ''}${diff.asl_diff}s<br>
+                        • Score différence: ${diff.score_diff > 0 ? '+' : ''}${diff.score_diff}<br>
+                        • Scènes différence: ${diff.scenes_diff > 0 ? '+' : ''}${diff.scenes_diff}<br>
+                        <br>
+                        <strong style="color: #00d4ff;">${comp.recommendation}</strong>
+                    </div>
+                    
+                    <div style="margin-top: 15px;">
+                        <strong>Scènes détaillées (premières 5):</strong>
+                        <div style="margin-top: 10px; font-size: 0.9em;">
+                            <div style="color: #00d4ff;">${v1.name}:</div>
+                            ${v1.scenes.map((s, i) => `<div style="padding-left: 15px; color: #aaa;">Plan ${i+1}: ${s.start}s → ${s.end}s (${s.duration}s)</div>`).join('')}
+                        </div>
+                        <div style="margin-top: 15px; font-size: 0.9em;">
+                            <div style="color: #00ff88;">${v2.name}:</div>
+                            ${v2.scenes.map((s, i) => `<div style="padding-left: 15px; color: #aaa;">Plan ${i+1}: ${s.start}s → ${s.end}s (${s.duration}s)</div>`).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('compare-results').innerHTML = html;
+        }
+        
+        // Charger l'historique
+        async function loadHistory() {
+            try {
+                // Note: L'API Supabase est côté serveur, donc on utilise fetch
+                const response = await fetch('/api/history?limit=10');
+                const result = await response.json();
+                
+                if (result.success && result.data.length > 0) {
+                    const html = result.data.map(item => `
+                        <div class="history-item">
+                            <strong>${item.series_title || 'Vidéo inconnue'}</strong><br>
+                            Score: ${item.composite_score || item.pacing_score} | 
+                            ASL: ${item.average_shot_length}s | 
+                            ${item.evaluation_label || item.evaluation?.label || 'N/A'}<br>
+                            <small style="color: #666;">${new Date(item.created_at).toLocaleString()}</small>
+                        </div>
+                    `).join('');
+                    
+                    document.getElementById('history-results').innerHTML = html;
+                } else {
+                    document.getElementById('history-results').innerHTML = 
+                        '<p style="text-align: center; color: #aaa; padding: 20px;">Aucune analyse dans l\'historique</p>';
+                }
+            } catch (error) {
+                document.getElementById('history-results').innerHTML = 
+                    '<div class="error">❌ Impossible de charger l\'historique</div>';
+            }
+        }
+        
+        // Ajouter un endpoint history dans l'API Flask
+    </script>
+</body>
+</html>

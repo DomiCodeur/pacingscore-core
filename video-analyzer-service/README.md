@@ -1,274 +1,352 @@
-# PacingScore Video Analyzer Service
+# PacingScore - Analyse de Pacing Vidéo
 
-Service Python pour l'analyse réelle des cuts de scène avec **PySceneDetect** et **FFmpeg**.
+## 🎯 Objectif
+PacingScore est un système d'analyse vidéo automatisé qui détecte les "cuts" de scène dans des vidéos YouTube et calcule un **score de pacing** pour évaluer si le contenu est adapté aux enfants.
 
-## 🎯 Principe
+---
 
-L'analyse se base sur l'**ASL (Average Shot Length)** - la durée moyenne d'un plan :
-- **ASL < 4s** → Très stimulant (mauvais pour les enfants)
-- **ASL 4-9s** → Stimulant
-- **ASL 9-14s** → Calme (bon)
-- **ASL > 14s** → Très calme (excellent)
+## 🏗️ Architecture
+
+```
+PacingScore/
+├── video-analyzer-service/     # Service Python Flask
+│   ├── api.py                  # API REST (port 5000)
+│   ├── analyzer.py             # Analyseur vidéo (PySceneDetect + OpenCV)
+│   ├── supabase_manager.py     # Gestionnaire base de données
+│   ├── scheduled_scanner.py    # Scanner programmé
+│   ├── requirements.txt        # Dépendances Python
+│   ├── .env.example            # Exemple de configuration
+│   ├── static/                 # Interface web
+│   │   └── index.html
+│   └── temp/                   # Vidéos temporaires (à créer)
+└── Supabase                    # Base de données cloud
+    └── analysis_results        # Table de stockage
+```
+
+---
 
 ## 📦 Installation
 
-### 1. Python et dépendances
-
+### 1. Installer les dépendances
 ```bash
-# Créer un environnement virtuel (recommandé)
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# ou
-venv\Scripts\activate  # Windows
-
-# Installer les dépendances
 pip install -r requirements.txt
 ```
 
-### 2. FFmpeg (requis pour PySceneDetect)
-
+### 2. Configurer l'environnement
+Copiez `.env.example` vers `.env` et remplissez vos valeurs :
 ```bash
-# Ubuntu/Debian
-sudo apt-get update
-sudo apt-get install ffmpeg
-
-# macOS
-brew install ffmpeg
-
-# Windows
-# Télécharger depuis https://ffmpeg.org/download.html
-# et ajouter au PATH
+cp .env.example .env
+# Éditez .env avec vos valeurs réelles
 ```
 
-### 3. yt-dlp (pour télécharger les vidéos YouTube)
-
+### 3. Créer le dossier temporaire
 ```bash
-pip install yt-dlp
-# ou
-sudo apt install yt-dlp  # Ubuntu/Debian
-# ou
-brew install yt-dlp  # macOS
+mkdir temp
 ```
 
-## 🚀 Utilisation
+---
 
-### API Flask (Service en ligne)
+## 🚀 Lancement
 
+### En mode développement (Flask)
 ```bash
-# Démarrer le serveur
+# Terminal 1
 python api.py
-
-# Le service sera accessible sur http://localhost:5000
 ```
 
-#### Endpoints
-
-**1. Analyser une vidéo YouTube**
-
+### En mode production (Waitress - recommandé)
 ```bash
-curl -X POST http://localhost:5000/analyze \
-  -H "Content-Type: application/json" \
-  -d '{"video_url": "https://www.youtube.com/watch?v=VIDEO_ID"}'
+# Terminal 1
+set USE_WAITRESS=true
+python api.py
 ```
 
-**2. Analyser un trailer depuis TMDB**
-
-```bash
-curl -X POST http://localhost:5000/analyze-from-trailer \
-  -H "Content-Type: application/json" \
-  -d '{
-    "trailer_url": "https://www.youtube.com/watch?v=VIDEO_ID",
-    "series_title": "Babar"
-  }'
+### Interface web
+Ouvrez votre navigateur sur :
+```
+http://localhost:5000
 ```
 
-**3. Scanner des séries depuis TMDB**
+---
 
-```bash
-python tmdb_trailer_analyzer.py
-```
+## 📡 Endpoints API
 
-## 📊 Format des résultats
+### 1. Analyser une vidéo
+**POST `/analyze`**
 
 ```json
 {
-  "success": true,
-  "series_title": "Babar",
-  "tmdb_id": 12345,
-  "trailer_url": "https://www.youtube.com/watch?v=...",
-  "video_duration": 125.5,
-  "num_scenes": 42,
-  "average_shot_length": 10.2,
-  "pacing_score": 85.0,
-  "evaluation": {
-    "label": "TRÈS CALME",
-    "description": "Cuts rares (10-14s). Idéal pour les tout-petits.",
-    "color": "green"
-  }
+    "video_url": "https://www.youtube.com/watch?v=...",
+    "max_duration": 120,
+    "analyze_motion": false,
+    "analyze_flashes": true
 }
 ```
 
-## 🔧 Architecture
-
-```
-video-analyzer-service/
-├── analyzer.py          # Coeur de l'analyse (PySceneDetect)
-├── api.py               # API Flask
-├── tmdb_trailer_analyzer.py  # Analyseur TMDB
-├── requirements.txt     # Dépendances Python
-└── README.md           # Ce fichier
-```
-
-## 🎬 Workflow complet
-
-### 1. Récupération depuis TMDB
-
-```python
-# tmdb_trailer_analyzer.py
-analyzer = TMDBTrailerAnalyzer("VOTRE_CLE_TMDB")
-results = analyzer.scan_popular_shows(genre_ids=[16, 10751], max_shows=5)
-```
-
-### 2. Téléchargement du trailer
-
-```
-yt-dlp --format worst[height<=480] --download-sections "*0:00-2:00" [URL]
-```
-
-### 3. Analyse avec PySceneDetect
-
-```python
-from scenedetect import detect, ContentDetector
-
-scene_list = detect(video_path, ContentDetector(threshold=27.0))
-num_scenes = len(scene_list)
-total_duration = get_duration(video_path)
-asl = total_duration / num_scenes
-```
-
-### 4. Calcul du score
-
-```
-ASL = Durée totale / Nombre de scènes
-
-Score = 100 - (facteur × ASL bas)
-
-Exemple:
-ASL = 10s → Score = 100
-ASL = 2s  → Score = 20
-```
-
-## 🔗 Intégration avec Spring Boot
-
-### Configuration backend
-
-```yaml
-# application.properties
-video.analyzer.url=http://localhost:5000
-video.analyzer.enabled=true
-```
-
-### Appel depuis Spring Boot
-
-```java
-@Service
-public class VideoAnalysisService {
-    
-    @Value("${video.analyzer.url}")
-    private String analyzerUrl;
-    
-    public VideoAnalysisResult analyzeVideo(String videoUrl) {
-        // Appel API Python
-        String requestBody = "{\"video_url\": \"" + videoUrl + "\"}";
-        
-        // Retourner les résultats
-        return restTemplate.postForObject(
-            analyzerUrl + "/analyze",
-            requestBody,
-            VideoAnalysisResult.class
-        );
+**Réponse :**
+```json
+{
+    "success": true,
+    "video_duration": 120.0,
+    "num_scenes": 15,
+    "average_shot_length": 8.0,
+    "pacing_score": 65,
+    "composite_score": 62,
+    "evaluation": {
+        "label": "CALME",
+        "description": "Cuts modérés...",
+        "color": "lime"
+    },
+    "motion_analysis": {
+        "motion_intensity": 12.5,
+        "level": "Calme"
+    },
+    "flash_analysis": {
+        "black_frames": 2,
+        "flashes": 3,
+        "intensity": 15.0
     }
 }
 ```
 
-## ⚙️ Paramètres
+### 2. Comparer deux vidéos
+**POST `/compare`**
 
-### Seuil de détection (threshold)
+```json
+{
+    "video1_url": "https://www.youtube.com/watch?v=...",
+    "video2_url": "https://www.youtube.com/watch?v=...",
+    "name1": "Puffin Rock",
+    "name2": "Cocomelon"
+}
+```
 
-- **20-25** : Détecte plus de scènes (plus sensible)
-- **27** : Valeur par défaut (équilibrée)
-- **30-35** : Détecte moins de scènes (moins sensible)
+### 3. Analyser un trailer vs épisode
+**POST `/analyze-trailer`**
 
-### Durée d'analyse
+```json
+{
+    "trailer_url": "https://www.youtube.com/watch?v=...",
+    "episode_url": "https://www.youtube.com/watch?v=...",
+    "series_title": "Nom de la série"
+}
+```
 
-- **2 minutes** : Suffisant pour détecter le style de montage
-- **Plus = meilleur** mais plus long à télécharger
+### 4. Récupérer l'historique
+**GET `/history?limit=10`**
 
-## 🎯 Métriques d'évaluation
+---
 
-| ASL (s) | Score | Évaluation |
-|---------|-------|------------|
-| < 4 | < 25 | 🔴 Très stimulant |
-| 4-6 | 25-45 | 🟠 Stimulant |
-| 6-8 | 45-65 | 🟡 Modéré |
-| 8-10 | 65-80 | 🟢 Calme |
-| 10-14 | 80-95 | 🟢 Très calme |
-| > 14 | > 95 | 🟢 Contemplatif |
+## 🧪 Tests
 
-## ⚠️ Limitations
+### Test local (vidéo de test)
+```bash
+python test_local.py
+```
 
-### Légalité
-- yt-dlp respecte les conditions d'utilisation YouTube
-- Téléchargement limité à des fins d'analyse non commerciale
-- Pour usage commercial, consulter un avocat
+### Test API
+```bash
+# Avec PowerShell
+$body = @{
+    video_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    max_duration = 60
+} | ConvertTo-Json
 
-### Performance
-- Analyse d'une vidéo : 30-60 secondes
-- Téléchargement : dépend de la vitesse réseau
-- Espace disque : ~50MB par vidéo (nettoyé automatiquement)
+Invoke-RestMethod -Uri "http://localhost:5000/analyze" `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body $body
+```
 
-### Précision
-- L'analyse de la bande-annonce est représentative du style de la série
-- Les séries sans trailer ne peuvent pas être analysées
-- L'ASL est une métrique objective mais ne capture pas tout
+### Test scan programmé
+```bash
+python scheduled_scanner.py
+```
 
-## 🔮 Évolutions possibles
+---
 
-- [ ] Analyse du motion blur (flou de mouvement)
-- [ ] Détection des flashs et saturation lumineuse
-- [ ] Intégration des retours utilisateurs
-- [ ] Analyse du volume sonore
-- [ ] Modèle ML pour prédire l'impact sur les enfants
+## 🔧 Fonctionnalités Avancées
 
-## 📚 Ressources
+### 1. Analyse du mouvement (Motion Intensity)
+Calcul du flux optique avec OpenCV pour détecter les mouvements de caméra intensifs.
 
-- [PySceneDetect Documentation](https://pyscenedetect.readthedocs.io/)
-- [FFmpeg Scene Detection](https://ffmpeg.org/ffmpeg-filters.html#select-1)
-- [TMDB API Documentation](https://developers.themoviedb.org/3)
-- [ASL Standard Industry](https://en.wikipedia.org/wiki/Average_shot_length)
+**Activation :**
+```json
+{ "analyze_motion": true }
+```
+
+**Limitation :** Analyse les 30 premières secondes pour la performance.
+
+### 2. Détection des flashs
+Détecte les passages noirs et les changements brutaux de luminosité.
+
+**Métriques :**
+- `black_frames`: Nombre de frames quasi-noires
+- `flashes`: Nombre de transitions brutales
+- `intensity`: Score d'intensité (0-100)
+
+### 3. Score composite
+Combine plusieurs facteurs pour un score plus précis :
+
+```
+Score = f(ASL, Mouvement, Flashs)
+```
+
+### 4. Scanner programmé
+Analyse automatique des nouveautés selon des priorités :
+
+**Priorité 1 :** Nouveautés TMDB
+**Priorité 2 :** Séries avec tags "Animation" + "Bébé"
+**Priorité 3 :** Séries non scannées récemment
+
+---
+
+## 📊 Échelle de Score
+
+| Score | ASL (sec/plan) | Évaluation | Niveau de stimulation |
+|-------|----------------|------------|----------------------|
+| 0-20  | < 4s           | HYPER-STIMULANT | Très mauvais |
+| 20-40 | 4-6s           | STIMULANT | Mauvais |
+| 40-60 | 6-8s           | MODÉRÉ | Acceptable |
+| 60-80 | 8-10s          | CALME | Bon |
+| 80-100| > 10s          | TRÈS CALME | Excellent |
+
+---
+
+## 🔧 Configuration
+
+### Variables d'environnement (.env)
+
+```env
+# Supabase
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-anon-key
+
+# API
+FLASK_HOST=0.0.0.0
+FLASK_PORT=5000
+
+# Analyseur
+SCENEDETECT_THRESHOLD=27.0
+MIN_SCENE_LEN=15
+MAX_VIDEO_DURATION=120
+
+# yt-dlp
+YT_DLP_QUALITY=bestvideo[height<=480]
+YT_DLP_OUTPUT_TEMPLATE=temp/%(id)s.%(ext)s
+
+# Serveur
+USE_WAITRESS=true
+```
+
+---
 
 ## 🐛 Dépannage
 
-### PySceneDetect non installé
+### Problème : yt-dlp ne télécharge pas
+**Solution :** Vérifier que yt-dlp est installé :
 ```bash
-pip install pyscenedetect
+pip install yt-dlp --upgrade
 ```
 
-### FFmpeg non trouvé
-```bash
-ffmpeg -version
-# Si pas installé: sudo apt install ffmpeg
+### Problème : Port 5000 déjà utilisé
+**Solution :** Changer le port dans `.env` :
+```env
+FLASK_PORT=5001
 ```
 
-### Erreur yt-dlp
+### Problème : PySceneDetect API error
+**Solution :** Vérifier la version :
 ```bash
-yt-dlp --version
-# Mettre à jour: pip install --upgrade yt-dlp
+pip show scenedetect
+# Devrait afficher 0.6.7.1 ou plus
 ```
 
-### Problèmes de permissions
-```bash
-# Créer le dossier temporaire
-mkdir -p ./temp/videos
-chmod 755 ./temp/videos
+### Problème : Supabase non configuré
+**Solution :** Le système fonctionne en mode "mock" sans Supabase.
+Pour la production, configurez les variables `SUPABASE_URL` et `SUPABASE_ANON_KEY`.
+
+---
+
+## 📈 Métriques détaillées
+
+### ASL (Average Shot Length)
+Durée moyenne d'un plan en secondes.
+- **Calcul :** Durée totale / Nombre de scènes détectées
+- **Seuil de détection :** Configurable (défaut : 27.0)
+
+### Intensité du mouvement
+Score 0-100 basé sur le flux optique Lucas-Kanade.
+- **Méthode :** Analyse des 30 premières secondes
+- **Détails :** Magnitude moyenne des vecteurs de mouvement
+
+### Détection des flashs
+Changements de luminosité > 100 niveaux de gris.
+- **Frames noirs :** Luminosité moyenne < 10
+- **Flashs :** Variation de luminosité > 100
+
+---
+
+## 🔮 Prochaines évolutions
+
+1. **Intégration TMDB** : Récupération automatique des séries populaires
+2. **Cache Redis** : Mémoriser les analyses pour éviter les downloads répétés
+3. **API GraphQL** : API plus flexible pour les requêtes complexes
+4. **Batch processing** : Analyse parallèle de multiples vidéos
+5. **Alertes email** : Notification quand une série dépasse un seuil
+6. **Widget Embeddable** : Intégration sur des sites tiers
+
+---
+
+## 📚 Ressources
+
+- **Documentation PySceneDetect** : https://www.scenedetect.com/docs/
+- **API Supabase** : https://supabase.com/docs
+- **yt-dlp documentation** : https://github.com/yt-dlp/yt-dlp/wiki
+
+---
+
+## 📝 Notes techniques
+
+### Performances
+- **Analyse simple** : 1-2 minutes pour une vidéo de 2 minutes
+- **Avec mouvement** : +30-60 secondes pour l'analyse de flux optique
+- **Téléchargement** : Dépend de la vitesse de connexion
+
+### Limites
+- YouTube peut bloquer certaines vidéos (géorestrictions)
+- Les vidéos > 10 minutes sont tronquées par défaut
+- Le détection de scènes dépend du seuil configuré
+
+### Sécurité
+- L'API n'a pas d'authentification (à ajouter en production)
+- Les fichiers temporaires sont nettoyés après analyse
+- Pas de stockage persistant des vidéos (sauf dans temp/)
+
+---
+
+## 💡 Exemples d'utilisation
+
+### Pour un parent
+```json
+{
+    "video_url": "https://www.youtube.com/watch?v=différentie_puffin_rock",
+    "max_duration": 60
+}
 ```
+→ Score : 78 (TRÈS CALME) ✅ Recommandé pour les jeunes enfants
+
+### Pour comparer Cocomelon vs Puffin Rock
+```json
+{
+    "video1_url": "...cocomelon...",
+    "video2_url": "...puffin_rock...",
+    "name1": "Cocomelon",
+    "name2": "Puffin Rock"
+}
+```
+→ Cocomelon : Score 25 (STIMULANT) ❌ / Puffin Rock : Score 78 (CALME) ✅
+
+---
+
+**Projet développé avec ❤️ pour aider les parents**

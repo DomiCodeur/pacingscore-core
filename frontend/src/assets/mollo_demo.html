@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mollo - Démonstration des images</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }
+        h1 { text-align: center; color: #333; }
+        .info { text-align: center; margin: 20px 0; padding: 15px; background: #e8f5e9; border-radius: 8px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; margin-top: 20px; }
+        .card { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .card img { width: 100%; height: 300px; object-fit: cover; }
+        .card-info { padding: 12px; }
+        .card-title { font-weight: bold; margin-bottom: 8px; }
+        .card-score { color: #4CAF50; font-weight: bold; font-size: 18px; }
+        .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; color: white; font-size: 12px; }
+        .badge.green { background: #4CAF50; }
+        .badge.lime { background: #8BC34A; }
+        .badge.yellow { background: #FF9800; }
+        .badge.red { background: #F44336; }
+        .links { text-align: center; margin-top: 30px; }
+        .links a { display: inline-block; margin: 5px 10px; padding: 10px 20px; background: #4CAF50; color: white; text-decoration: none; border-radius: 5px; }
+        .links a:hover { background: #45a049; }
+    </style>
+</head>
+<body>
+    <h1>🎨 Mollo - Démonstration des images SVG</h1>
+    
+    <div class="info">
+        <strong>Projet Mollo (anciennement PacingScore)</strong><br>
+        Application de score des dessins animés pour les enfants<br>
+        <br>
+        <strong>✅ Problèmes résolus :</strong><br>
+        - Images SVG fonctionnelles (placeholders)<br>
+        - Nom de l'application : Mollo<br>
+        - Serveur Angular démarré sur port 9000
+    </div>
+    
+    <div class="grid">
+        <!-- Puffin Rock - Green (78/100) -->
+        <div class="card">
+            <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='450' viewBox='0 0 300 450'%3E%3Crect width='300' height='450' fill='%234CAF50'/%3E%3Ctext x='150' y='180' font-family='Arial' font-size='32' fill='white' text-anchor='middle' font-weight='bold'%3EPuffin%3C/text%3E%3Ctext x='150' y='220' font-family='Arial' font-size='32' fill='white' text-anchor='middle' font-weight='bold'%3ERock%3C/text%3E%3Ctext x='150' y='320' font-family='Arial' font-size='24' fill='white' text-anchor='middle' font-weight='bold'%3E78/100%3C/text%3E%3Ctext x='150' y='360' font-family='Arial' font-size='16' fill='white' opacity='0.7' text-anchor='middle'%3E0-3 ans%3C/text%3E%3Ctext x='150' y='70' font-family='Arial' font-size='30' text-anchor='middle'%3E%F0%9F%8E%AC%3C/text%3E%3C/svg%3E" alt="Puffin Rock">
+            <div class="card-info">
+                <div class="card-title">Puffin Rock</div>
+                <div class="card-score">78/100</div>
+                <span class="badge green">Excellent</span>
+            </div>
+        </div>
+        
+        <!-- Bluey - Lime (65/100) -->
+        <div class="card">
+            <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='450' viewBox='0 0 300 450'%3E%3Crect width='300' height='450' fill='%238BC34A'/%3E%3Ctext x='150' y='200' font-family='Arial' font-size='36' fill='white' text-anchor='middle' font-weight='bold'%3EBluey%3C/text%3E%3Ctext x='150' y='320' font-family='Arial' font-size='24' fill='white' text-anchor='middle' font-weight='bold'%3E65/100%3C/text%3E%3Ctext x='150' y='360' font-family='Arial' font-size='16' fill='white' opacity='0.7' text-anchor='middle'%3E3-5 ans%3C/text%3E%3Ctext x='150' y='70' font-family='Arial' font-size='30' text-anchor='middle'%3E%F0%9F%8E%AC%3C/text%3E%3C/svg%3E" alt="Bluey">
+            <div class="card-info">
+                <div class="card-title">Bluey</div>
+                <div class="card-score">65/100</div>
+                <span class="badge lime">Bon</span>
+            </div>
+        </div>
+        
+        <!-- Peppa Pig - Yellow (55/100) -->
+        <div class="card">
+            <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='450' viewBox='0 0 300 450'%3E%3Crect width='300' height='450' fill='%23FF9800'/%3E%3Ctext x='150' y='180' font-family='Arial' font-size='32' fill='white' text-anchor='middle' font-weight='bold'%3EPeppa%3C/text%3E%3Ctext x='150' y='220' font-family='Arial' font-size='32' fill='white' text-anchor='middle' font-weight='bold'%3EPig%3C/text%3E%3Ctext x='150' y='320' font-family='Arial' font-size='24' fill='white' text-anchor='middle' font-weight='bold'%3E55/100%3C/text%3E%3Ctext x='150' y='360' font-family='Arial' font-size='16' fill='white' opacity='0.7' text-anchor='middle'%3E5-7 ans%3C/text%3E%3Ctext x='150' y='70' font-family='Arial' font-size='30' text-anchor='middle'%3E%F0%9F%8E%AC%3C/text%3E%3C/svg%3E" alt="Peppa Pig">
+            <div class="card-info">
+                <div class="card-title">Peppa Pig</div>
+                <div class="card-score">55/100</div>
+                <span class="badge yellow">Modéré</span>
+            </div>
+        </div>
+        
+        <!-- Cocomelon - Red (22/100) -->
+        <div class="card">
+            <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='450' viewBox='0 0 300 450'%3E%3Crect width='300' height='450' fill='%23F44336'/%3E%3Ctext x='150' y='180' font-family='Arial' font-size='28' fill='white' text-anchor='middle' font-weight='bold'%3ECocomelon%3C/text%3E%3Ctext x='150' y='320' font-family='Arial' font-size='24' fill='white' text-anchor='middle' font-weight='bold'%3E22/100%3C/text%3E%3Ctext x='150' y='360' font-family='Arial' font-size='16' fill='white' opacity='0.7' text-anchor='middle'%3E7+ ans%3C/text%3E%3Ctext x='150' y='70' font-family='Arial' font-size='30' text-anchor='middle'%3E%F0%9F%8E%AC%3C/text%3E%3C/svg%3E" alt="Cocomelon">
+            <div class="card-info">
+                <div class="card-title">Cocomelon</div>
+                <div class="card-score">22/100</div>
+                <span class="badge red">Rapide</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="links">
+        <a href="http://localhost:9000" target="_blank">Application Mollo (Angular)</a>
+        <a href="http://localhost:9000/assets/test_mollo.html" target="_blank">Page de test</a>
+    </div>
+    
+    <div class="info" style="margin-top: 30px;">
+        <strong>Notes techniques :</strong><br>
+        - Les images sont des SVG en data URLs (base64)<br>
+        - Chaque couleur représente le score : Vert=Excellent, Rouge=Rapide<br>
+        - L'application est en Angular avec Tailwind CSS<br>
+        - Serveur sur http://localhost:9000
+    </div>
+</body>
+</html>

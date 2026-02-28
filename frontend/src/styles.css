@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+/* CSS Variables for Score Colors */
+:root {
+  --score-excellent: #4caf50;
+  --score-good: #8bc34a;
+  --score-medium: #ff9800;
+  --score-bad: #f44336;
+  --score-verybad: #d32f2f;
+}
+
 /* Custom Animations */
 @keyframes fadeIn {
   from { opacity: 0; }
@@ -17,6 +26,11 @@
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 /* Custom Classes */
@@ -63,7 +77,7 @@
 
 /* Focus Styles */
 .focus-ring {
-  @apply ring-2 ring-purple-500 ring-opacity-50;
+  @apply ring-2 ring-green-500 ring-opacity-50;
 }
 
 /* Card Hover Effects */
@@ -73,4 +87,14 @@
 
 .card-hover:hover {
   @apply transform -translate-y-1 shadow-lg;
+}
+
+/* Modal Backdrop */
+.modal-backdrop {
+  @apply fixed inset-0 bg-gray-900 bg-opacity-75 transition-opacity;
+}
+
+/* Modal Panel */
+.modal-panel {
+  @apply inline-block align-bottom bg-white rounded-2xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-2xl w-full;
 }

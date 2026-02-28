@@ -1,0 +1,35 @@
+{
+  "success": true,
+  "video_duration": 3.0,
+  "num_scenes": 0,
+  "average_shot_length": 3.0,
+  "pacing_score": 10,
+  "composite_score": 9.88,
+  "evaluation": {
+    "label": "TRÈS STIMULANT",
+    "description": "Cuts extrêmement fréquents (< 4s). Déconseillé aux jeunes enfants.",
+    "color": "red"
+  },
+  "scene_details": [],
+  "motion_analysis": {
+    "motion_intensity": 0.0,
+    "level": "Calme"
+  },
+  "flash_analysis": {
+    "black_frames": 0,
+    "flashes": 1,
+    "flash_details": [
+      {
+        "frame": 20,
+        "time": 2.0,
+        "diff": 121.0
+      }
+    ],
+    "intensity": 3
+  },
+  "composite_evaluation": {
+    "label": "HYPER-STIMULANT",
+    "description": "Très intense - Déconseillé aux jeunes enfants",
+    "color": "red"
+  }
+}
