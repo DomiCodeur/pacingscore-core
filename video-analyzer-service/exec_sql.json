@@ -1,0 +1,1 @@
+{"sql_query": "ALTER TABLE analysis_results ADD COLUMN analysis_date TIMESTAMPTZ DEFAULT NOW();"}

@@ -1,0 +1,17 @@
+# Étape 1 : Build de l'application Angular
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm install --legacy-peer-deps
+COPY . .
+RUN npm run build -- --configuration production
+
+# Étape 2 : Serveur Nginx
+FROM nginx:alpine
+# On copie tout le dossier dist complet
+COPY --from=build /app/dist /usr/share/nginx/html
+# On utilise un script shell simple pour tout remonter à la racine si besoin
+RUN cd /usr/share/nginx/html && (mv */* . 2>/dev/null || true) && (mv */* . 2>/dev/null || true)
+COPY ./nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

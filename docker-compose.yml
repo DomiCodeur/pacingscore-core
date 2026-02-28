@@ -1,0 +1,52 @@
+services:
+  # Backend Spring Boot API
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "8080:8080"
+    environment:
+      - SUPABASE_URL=https://gjkwsrzmaecmtfozkwmw.supabase.co
+      - SUPABASE_KEY=sb_publishable_2vEhYPJjXxrqyZRbYU2kSg_20NSSJ2t
+      - TMDB_API_KEY=65a5c670b9644a800c3d59f2885d4d4f
+      - YOUTUBE_API_KEY=AIzaSyBwok2Yo_TjNiYBWVa8CP5VS6tSZJwDXAc
+      - ANALYZER_URL=http://analyzer:5000
+    depends_on:
+      - analyzer
+    networks:
+      - mollo-network
+
+  # Video Analyzer Service (Python/OpenCV)
+  analyzer:
+    build:
+      context: ./video-analyzer-service
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    environment:
+      - SUPABASE_URL=https://gjkwsrzmaecmtfozkwmw.supabase.co
+      - SUPABASE_KEY=sb_publishable_2vEhYPJjXxrqyZRbYU2kSg_20NSSJ2t
+      - YOUTUBE_API_KEY=AIzaSyBwok2Yo_TjNiYBWVa8CP5VS6tSZJwDXAc
+    volumes:
+      - ./video-analyzer-service/temp:/app/temp
+    networks:
+      - mollo-network
+
+  # Frontend Angular
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.angular
+    ports:
+      - "9000:80"
+    environment:
+      - API_URL=http://backend:8080
+    depends_on:
+      - backend
+    networks:
+      - mollo-network
+
+networks:
+  mollo-network:
+    driver: bridge

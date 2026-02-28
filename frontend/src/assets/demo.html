@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PacingScore - Démo Images</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }
+        h1 { text-align: center; color: #333; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; margin-top: 20px; }
+        .card { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .card img { width: 100%; height: 300px; object-fit: cover; }
+        .card-info { padding: 12px; }
+        .card-title { font-weight: bold; margin-bottom: 8px; }
+        .card-score { color: #4CAF50; font-weight: bold; }
+        .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; color: white; font-size: 12px; }
+        .badge.green { background: #4CAF50; }
+        .badge.lime { background: #8BC34A; }
+        .badge.yellow { background: #FF9800; }
+        .badge.red { background: #F44336; }
+    </style>
+</head>
+<body>
+    <h1>PacingScore - Images SVG Générées Dynamiquement</h1>
+    <p style="text-align: center; color: #666;">Ces images sont créées en temps réel avec des SVG</p>
+    
+    <div class="grid">
+        <!-- Puffin Rock -->
+        <div class="card">
+            <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iNDUwIiB2aWV3Qm94PSIwIDAgMzAwIDQ1MCI+PHJlY3Qgd2lkdGg9IjMwMCIgaGVpZ2h0PSI0NTAiIGZpbGw9IiM0Q0FGNTAiLz48dGV4dCB4PSIxNTAiIHk9IjE4MCIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjMyIiBmaWxsPSJ3aGl0ZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC13ZWlnaHQ9ImJvbGQiPlB1ZmZpbjwvdGV4dD48dGV4dCB4PSIxNTAiIHk9IjIyMCIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjMyIiBmaWxsPSJ3aGl0ZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC13ZWlnaHQ9ImJvbGQiPlJvY2s8L3RleHQ+PHRleHQgeD0iMTUwIiB5PSIzMjAiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIyMCIgZmlsbD0id2hpdGUiIG9wYWNpdHk9IjAuOSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC13ZWlnaHQ9ImJvbGQiPjc4LzEwMDwvdGV4dD48dGV4dCB4PSIxNTAiIHk9IjM1NSIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjE0IiBmaWxsPSJ3aGl0ZSIgb3BhY2l0eT0iMC43IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj4wLTMgYW5zPC90ZXh0Pjwvc3ZnPg==" alt="Puffin Rock">
+            <div class="card-info">
+                <div class="card-title">Puffin Rock</div>
+                <div class="card-score">78/100</div>
+                <span class="badge green">Excellent</span>
+            </div>
+        </div>
+        
+        <!-- Bluey -->
+        <div class="card">
+            <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iNDUwIiB2aWV3Qm94PSIwIDAgMzAwIDQ1MCI+PHJlY3Qgd2lkdGg9IjMwMCIgaGVpZ2h0PSI0NTAiIGZpbGw9IiM4QkMzNEEiLz48dGV4dCB4PSIxNTAiIHk9IjIwMCIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjM2IiBmaWxsPSJ3aGl0ZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC13ZWlnaHQ9ImJvbGQiPkJsdWV5PC90ZXh0Pjx0ZXh0IHg9IjE1MCIgeT0iMzIwIiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMjAiIGZpbGw9IndoaXRlIiBvcGFjaXR5PSIwLjkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtd2VpZ2h0PSJib2xkIj42NS8xMDA8L3RleHQ+PHRleHQgeD0iMTUwIiB5PSIzNTUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNCIgZmlsbD0id2hpdGUiIG9wYWNpdHk9IjAuNyIgdGV4dC1hbmNob3I9Im1pZGRsZSI+My01IGFuczwvdGV4dD48L3N2Zz4=" alt="Bluey">
+            <div class="card-info">
+                <div class="card-title">Bluey</div>
+                <div class="card-score">65/100</div>
+                <span class="badge lime">Bon</span>
+            </div>
+        </div>
+        
+        <!-- Peppa Pig -->
+        <div class="card">
+            <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iNDUwIiB2aWV3Qm94PSIwIDAgMzAwIDQ1MCI+PHJlY3Qgd2lkdGg9IjMwMCIgaGVpZ2h0PSI0NTAiIGZpbGw9IiNGRjk4MDAiLz48dGV4dCB4PSIxNTAiIHk9IjE4MCIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjMxIiBmaWxsPSJ3aGl0ZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC13ZWlnaHQ9ImJvbGQiPlBlcHBhPC90ZXh0Pjx0ZXh0IHg9IjE1MCIgeT0iMjE1IiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMzEiIGZpbGw9IndoaXRlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXdlaWdodD0iYm9sZCI+UGlnPC90ZXh0Pjx0ZXh0IHg9IjE1MCIgeT0iMzIwIiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMjAiIGZpbGw9IndoaXRlIiBvcGFjaXR5PSIwLjkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtd2VpZ2h0PSJib2xkIj41NS8xMDA8L3RleHQ+PHRleHQgeD0iMTUwIiB5PSIzNTUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNCIgZmlsbD0id2hpdGUiIG9wYWNpdHk9IjAuNyIgdGV4dC1hbmNob3I9Im1pZGRsZSI+NS03IGFuczwvdGV4dD48L3N2Zz4=" alt="Peppa Pig">
+            <div class="card-info">
+                <div class="card-title">Peppa Pig</div>
+                <div class="card-score">55/100</div>
+                <span class="badge yellow">Modéré</span>
+            </div>
+        </div>
+        
+        <!-- Cocomelon -->
+        <div class="card">
+            <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iNDUwIiB2aWV3Qm94PSIwIDAgMzAwIDQ1MCI+PHJlY3Qgd2lkdGg9IjMwMCIgaGVpZ2h0PSI0NTAiIGZpbGw9IiNGNDQzMzYiLz48dGV4dCB4PSIxNTAiIHk9IjE4MCIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjI4IiBmaWxsPSJ3aGl0ZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC13ZWlnaHQ9ImJvbGQiPkNvY29tZWxvbjwvdGV4dD48dGV4dCB4PSIxNTAiIHk9IjMyMCIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjIwIiBmaWxsPSJ3aGl0ZSIgb3BhY2l0eT0iMC45IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LXdlaWdodD0iYm9sZCI+MjIvMTAwPC90ZXh0Pjx0ZXh0IHg9IjE1MCIgeT0iMzU1IiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IndoaXRlIiBvcGFjaXR5PSIwLjciIHRleHQtYW5jaG9yPSJtaWRkbGUiPjctKyBhbnM8L3RleHQ+PC9zdmc+" alt="Cocomelon">
+            <div class="card-info">
+                <div class="card-title">Cocomelon</div>
+                <div class="card-score">22/100</div>
+                <span class="badge red">Rapide</span>
+            </div>
+        </div>
+    </div>
+    
+    <h2 style="margin-top: 40px; color: #333;">Comment ça marche ?</h2>
+    <p style="max-width: 800px; margin: 0 auto; color: #666; line-height: 1.6;">
+        Le service génère automatiquement des images SVG pour chaque dessin animé. 
+        Chaque image contient :
+    </p>
+    <ul style="max-width: 800px; margin: 10px auto; color: #666;">
+        <li>Le titre du dessin animé</li>
+        <li>Le score de calme (ex: 78/100)</li>
+        <li>La tranche d'âge recommandée</li>
+        <li>Une couleur correspondant au score (Vert=Excellent, Rouge=Rapide)</li>
+        <li>Une icône 🎬</li>
+    </ul>
+    
+    <p style="text-align: center; margin-top: 20px;">
+        <strong>URL du serveur Angular :</strong><br>
+        <code>http://localhost:8081</code>
+    </p>
+</body>
+</html>

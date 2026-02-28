@@ -50,6 +50,14 @@ public class TMDBService {
         return shows;
     }
     
+    /**
+     * Recherche un seul dessin animé par titre pour récupérer son image
+     */
+    public ShowInfo findSingleShow(String query) {
+        List<ShowInfo> results = searchShow(query);
+        return results.isEmpty() ? null : results.get(0);
+    }
+    
     private List<ShowInfo> searchShow(String query) {
         String url = "https://api.themoviedb.org/3/search/tv"
             + "?api_key=" + tmdbApiKey
