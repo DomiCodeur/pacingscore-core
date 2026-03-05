@@ -30,8 +30,9 @@ public class TMDBScannerService {
     /**
      * Scanne tous les dessins animés pour enfants sur TMDB
      * et les analyse pour calculer un score de calme
+     * @param force si true, réanalyse même les séries déjà présentes en base
      */
-    public ScanResult scanChildrenAnimations() {
+    public ScanResult scanChildrenAnimations(boolean force) {
         ScanResult result = new ScanResult();
         
         // Pages à scanner
