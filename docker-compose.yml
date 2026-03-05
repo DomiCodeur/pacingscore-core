@@ -2,7 +2,7 @@ services:
   # Backend Spring Boot API
   backend:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile.backend
     ports:
       - "8080:8080"
