@@ -1,4 +1,18 @@
+version: '3.8'
+
 services:
+  # Database Initialization
+  db-init:
+    image: postgres:latest
+    command: ["/bin/sh", "-c", "PGPASSWORD=$${SUPABASE_KEY} psql -h db.gjkwsrzmaecmtfozkwmw.supabase.co -U postgres -d postgres -f /docker-entrypoint-initdb.d/cleanup.sql"]
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - POSTGRES_PASSWORD=${SUPABASE_KEY}
+    volumes:
+      - ./database:/docker-entrypoint-initdb.d
+    networks:
+      - mollo-network
+
   # Backend Spring Boot API
   backend:
     build:
@@ -7,13 +21,20 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - SUPABASE_URL=https://gjkwsrzmaecmtfozkwmw.supabase.co
-      - SUPABASE_KEY=***REMOVED***
-      - TMDB_API_KEY=***REMOVED***
-      - YOUTUBE_API_KEY=***REMOVED***
-      - ANALYZER_URL=http://analyzer:5000
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - TMDB_API_KEY=${TMDB_API_KEY}
+      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY}
+      - ANALYZER_URL=${ANALYZER_URL:-http://analyzer:5000}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     depends_on:
-      - analyzer
+      analyzer:
+        condition: service_healthy
     networks:
       - mollo-network
 
@@ -25,11 +46,18 @@ services:
     ports:
       - "5000:5000"
     environment:
-      - SUPABASE_URL=https://gjkwsrzmaecmtfozkwmw.supabase.co
-      - SUPABASE_KEY=***REMOVED***
-      - YOUTUBE_API_KEY=***REMOVED***
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - TMDB_API_KEY=${TMDB_API_KEY}
+      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY}
     volumes:
       - ./video-analyzer-service/temp:/app/temp
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks:
       - mollo-network
 
@@ -42,10 +70,25 @@ services:
       - "9000:80"
     environment:
       - API_URL=http://backend:8080
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - mollo-network
+
+  # Watchtower pour auto-update des containers
+  watchtower:
+    image: containrrr/watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --interval 30 --cleanup
+    restart: unless-stopped
 
 networks:
   mollo-network:
