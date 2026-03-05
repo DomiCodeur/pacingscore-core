@@ -24,18 +24,29 @@ public class SupabaseService {
         String endpoint = supabaseConfig.getUrl() + "/rest/v1/video_analyses";
         
         Map<String, Object> data = new HashMap<>();
-        data.put("tmdb_id", show.getId());
-        data.put("title", show.getTitle());
-        data.put("description", show.getDescription());
+        // Colonnes obligatoires: pacing_score, age_rating, video_path (NOT NULL), cuts_per_minute (NOT NULL)
         data.put("pacing_score", show.getPacingScore());
         data.put("age_rating", show.getAgeRating());
+        data.put("cuts_per_minute", 0.0); // Pas d'analyse vidéo réelle pour TMDB, on met 0 par défaut
+        data.put("video_path", "TMDB: " + show.getTitle());
         
-        // Stocker les données TMDB en JSON
+        // Metadata: tout le reste (y compris les données TMDB)
+        Map<String, Object> metadata = new HashMap<>();
+        metadata.put("description", show.getDescription());
+        metadata.put("display_age", show.getAgeRating());
+        metadata.put("fr_title", show.getTitle());
+        metadata.put("tmdb_id", show.getId());
+        
+        // Sous-objet tmdb_data dans metadata
         Map<String, Object> tmdbData = new HashMap<>();
         tmdbData.put("poster_path", show.getPosterPath());
         tmdbData.put("backdrop_path", show.getBackdropPath());
         tmdbData.put("first_air_date", show.getFirstAirDate());
-        data.put("tmdb_data", tmdbData);
+        tmdbData.put("tmdb_id", show.getId());
+        tmdbData.put("fr_title", show.getTitle());
+        metadata.put("tmdb_data", tmdbData);
+        
+        data.put("metadata", metadata);
         
         // Configurer les headers
         HttpHeaders headers = new HttpHeaders();
@@ -54,7 +65,7 @@ public class SupabaseService {
     }
     
     /**
-     * Vérifie si une série existe déjà dans la base
+     * Vérifie si une série existe déjà dans la base (par tmdb_id dans metadata)
      */
     public boolean showExists(int tmdbId) {
         String endpoint = supabaseConfig.getUrl() + "/rest/v1/video_analyses";
@@ -67,8 +78,8 @@ public class SupabaseService {
         HttpEntity<String> request = new HttpEntity<>(headers);
         
         try {
-            // Rechercher par tmdb_id
-            String url = endpoint + "?tmdb_id=eq." + tmdbId;
+            // Rechercher par metadata->>tmdb_id
+            String url = endpoint + "?metadata->>tmdb_id=eq." + tmdbId;
             ResponseEntity<String> response = restTemplate.exchange(
                 url, HttpMethod.GET, request, String.class
             );

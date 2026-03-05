@@ -105,34 +105,68 @@ public class ShowController {
                 for (Map<String, Object> show : shows) {
                     Map<String, Object> mappedShow = new HashMap<>(show);
                     
-                    // 1. FORCER LE TITRE (video_path contient le nom dans ta base)
+                    // 1. FORCER LE TITRE
                     String title = (String) show.get("title");
                     Map<String, Object> meta = parseMetadata(show.get("metadata"));
-                    if (meta != null && meta.get("fr_title") != null) title = (String) meta.get("fr_title"); else if (title == null || title.isEmpty()) title = (String) show.get("video_path");
+                    if (meta != null && meta.get("fr_title") != null) {
+                        title = (String) meta.get("fr_title");
+                    } else if (title == null || title.isEmpty()) {
+                        title = (String) show.get("video_path");
+                    }
                     mappedShow.put("title", title);
                     
-                    // 2. Mapping des scores
-                    mappedShow.put("composite_score", show.getOrDefault("pacing_score", 0));
-                    if (meta != null && meta.get("display_age") != null) mappedShow.put("age_recommendation", meta.get("display_age")); else mappedShow.put("age_recommendation", show.getOrDefault("age_rating", "0+"));
-                    
-                    // 3. RECUPERATION IMAGE AUTOMATIQUE
+                    // 2. Age rating : prioriser age_rating si display_age vaut "0+" (défaut)
+                    String displayAge = meta != null ? (String) meta.get("display_age") : null;
+                    Object ageRatingObj = show.get("age_rating");
+                    String ageRating = "0+";
+                    if (ageRatingObj instanceof String) {
+                        ageRating = (String) ageRatingObj;
+                    } else if (ageRatingObj != null) {
+                        ageRating = ageRatingObj.toString();
+                    }
+                    String finalAge = (displayAge != null && !displayAge.equals("0+")) ? displayAge : ageRating;
+                    mappedShow.put("age_recommendation", finalAge);
+
+                    // 3. Récupération image
                     String posterPath = null;
+                    
+                    // 3a. Vérifier tmdb_data->poster_path
                     if (show.containsKey("tmdb_data") && show.get("tmdb_data") instanceof Map) {
                         posterPath = (String) ((Map) show.get("tmdb_data")).get("poster_path");
                     }
                     
-                    // Si pas d'image, on cherche sur TMDB avec le titre
+                    // 3b. Chercher par TMDB ID si pas d'image
+                    if ((posterPath == null || posterPath.isEmpty()) && meta != null) {
+                        Object tmdbIdObj = meta.get("tmdb_id");
+                        if (tmdbIdObj != null) {
+                            try {
+                                int tmdbId = Integer.parseInt(tmdbIdObj.toString());
+                                TMDBService.ShowInfo tmdbInfo = tmdbService.getShowDetailsById(tmdbId);
+                                if (tmdbInfo != null && tmdbInfo.getPosterPath() != null && !tmdbInfo.getPosterPath().isEmpty()) {
+                                    posterPath = tmdbInfo.getPosterPath();
+                                    // Enrichir description si manquante
+                                    if (mappedShow.get("description") == null && tmdbInfo.getDescription() != null) {
+                                        mappedShow.put("description", tmdbInfo.getDescription());
+                                    }
+                                }
+                            } catch (Exception e) { /* Silencieux */ }
+                        }
+                    }
+                    
+                    // 3c. Fallback par titre (fr + en)
                     if ((posterPath == null || posterPath.isEmpty()) && title != null) {
                         try {
-                            TMDBService.ShowInfo tmdbInfo = tmdbService.findSingleShow(title);
-                            if (tmdbInfo != null) {
+                            TMDBService.ShowInfo tmdbInfo = tmdbService.findSingleShowWithFallback(title);
+                            if (tmdbInfo != null && tmdbInfo.getPosterPath() != null && !tmdbInfo.getPosterPath().isEmpty()) {
                                 posterPath = tmdbInfo.getPosterPath();
-                                // On en profite pour enrichir la description si elle manque
-                                if (mappedShow.get("description") == null) mappedShow.put("description", tmdbInfo.getDescription());
+                                if (mappedShow.get("description") == null && tmdbInfo.getDescription() != null) {
+                                    mappedShow.put("description", tmdbInfo.getDescription());
+                                }
                             }
-                        } catch (Exception e) { /* Silencieux si TMDB échoue */ }
+                        } catch (Exception e) { /* Silencieux */ }
                     }
 
+                    // 3d. Appliquer le chemin (avec URL TMDB si nécessaire)
                     if (posterPath != null && !posterPath.isEmpty()) {
                         if (posterPath.startsWith("http")) {
                             mappedShow.put("poster_path", posterPath);
@@ -140,24 +174,32 @@ public class ShowController {
                             mappedShow.put("poster_path", "https://image.tmdb.org/t/p/w500" + (posterPath.startsWith("/") ? "" : "/") + posterPath);
                         }
                     } else {
-                        // FALLBACK ULTIME : Miniature Dailymotion si possible, sinon image Cartoon
-                        String videoUrl = (String) show.get("video_url");
-                        if (videoUrl != null && videoUrl.contains("dailymotion.com/video/")) {
-                            String vidId = videoUrl.substring(videoUrl.lastIndexOf("/") + 1);
-                            mappedShow.put("poster_path", "https://www.dailymotion.com/thumbnail/video/" + vidId);
-                        } else {
-                            mappedShow.put("poster_path", "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&q=80");
-                        }
+                        // FALLBACK ULTIME : image Unsplash (已验证加载)
+                        mappedShow.put("poster_path", "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&q=80");
                     }
                     
-                    // 4. Label d'évaluation
-                    double score = 0;
-                    Object s = show.get("pacing_score");
-                    if (s instanceof Number) score = ((Number) s).doubleValue();
+                    // 4. Label d'évaluation (avec protection NaN)
+                    Object pacingScoreObj = show.get("pacing_score");
+                    double compositeScore = 0;
+                    if (pacingScoreObj instanceof Number) {
+                        double val = ((Number) pacingScoreObj).doubleValue();
+                        compositeScore = Double.isNaN(val) ? 0 : val;
+                    } else if (pacingScoreObj instanceof String) {
+                        try {
+                            String str = ((String) pacingScoreObj).trim();
+                            if (!str.isEmpty()) {
+                                double val = Double.parseDouble(str);
+                                compositeScore = Double.isNaN(val) ? 0 : val;
+                            }
+                        } catch (NumberFormatException e) {
+                            compositeScore = 0;
+                        }
+                    }
+                    mappedShow.put("composite_score", compositeScore);
                     
-                    if (score >= 60) mappedShow.put("evaluation_label", "LENT");
-                    else if (score >= 45) mappedShow.put("evaluation_label", "BON");
-                    else if (score >= 25) mappedShow.put("evaluation_label", "MODÉRÉ");
+                    if (compositeScore >= 60) mappedShow.put("evaluation_label", "LENT");
+                    else if (compositeScore >= 45) mappedShow.put("evaluation_label", "BON");
+                    else if (compositeScore >= 25) mappedShow.put("evaluation_label", "MODÉRÉ");
                     else mappedShow.put("evaluation_label", "RAPIDE");
                     
                     result.add(mappedShow);

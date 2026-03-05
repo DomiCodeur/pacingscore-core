@@ -37,7 +37,7 @@ public class TMDBService {
         
         for (String name : cartoonNames) {
             try {
-                List<ShowInfo> results = searchShow(name);
+                List<ShowInfo> results = searchShow(name, "fr-FR");
                 if (!results.isEmpty()) {
                     shows.add(results.get(0));
                     Thread.sleep(200);
@@ -52,16 +52,29 @@ public class TMDBService {
     
     /**
      * Recherche un seul dessin animé par titre pour récupérer son image
+     * Essaie d'abord en fr-FR, puis en en-US si pas de poster
      */
-    public ShowInfo findSingleShow(String query) {
-        List<ShowInfo> results = searchShow(query);
-        return results.isEmpty() ? null : results.get(0);
+    public ShowInfo findSingleShowWithFallback(String query) {
+        // Essayer d'abord en français
+        List<ShowInfo> resultsFr = searchShow(query, "fr-FR");
+        ShowInfo showFr = resultsFr.isEmpty() ? null : resultsFr.get(0);
+        
+        if (showFr != null && showFr.getPosterPath() != null && !showFr.getPosterPath().isEmpty()) {
+            return showFr;
+        }
+        
+        // Sinon essayer en anglais
+        List<ShowInfo> resultsEn = searchShow(query, "en-US");
+        return resultsEn.isEmpty() ? null : resultsEn.get(0);
     }
     
-    private List<ShowInfo> searchShow(String query) {
+    /**
+     * Recherche un seul dessin animé par titre (langue spécifique)
+     */
+    private List<ShowInfo> searchShow(String query, String lang) {
         String url = "https://api.themoviedb.org/3/search/tv"
             + "?api_key=" + tmdbApiKey
-            + "&language=fr-FR"
+            + "&language=" + lang
             + "&query=" + URLEncoder.encode(query, StandardCharsets.UTF_8);
         
         try {
@@ -80,8 +93,8 @@ public class TMDBService {
                 show.setBackdropPath(item.optString("backdrop_path"));
                 show.setFirstAirDate(item.optString("first_air_date"));
                 
-                // Obtenir les détails complets
-                show = getShowDetails(show.getId(), show);
+                // Obtenir les détails complets (déjà dans la langue de la recherche)
+                show = getShowDetails(show.getId(), show, lang);
                 
                 shows.add(show);
             }
@@ -92,27 +105,88 @@ public class TMDBService {
         }
     }
     
-    private ShowInfo getShowDetails(int id, ShowInfo show) {
+    private ShowInfo searchShowById(int id, String lang) {
         String url = "https://api.themoviedb.org/3/tv/" + id
             + "?api_key=" + tmdbApiKey
-            + "&language=fr-FR";
+            + "&language=" + lang;
         
         try {
             String response = restTemplate.getForObject(url, String.class);
+            if (response == null) return null;
+            
+            JSONObject json = new JSONObject(response);
+            ShowInfo show = new ShowInfo();
+            show.setId(id);
+            show.setTitle(json.getString("name"));
+            show.setDescription(json.optString("overview", ""));
+            show.setPosterPath(json.optString("poster_path"));
+            show.setBackdropPath(json.optString("backdrop_path"));
+            show.setFirstAirDate(json.optString("first_air_date"));
+            
+            // Récupérer les genres
+            JSONArray genres = json.optJSONArray("genres");
+            if (genres != null) {
+                for (int i = 0; i < genres.length(); i++) {
+                    String genreName = genres.getJSONObject(i).getString("name").toLowerCase();
+                    show.getGenres().add(genreName);
+                }
+            }
+            
+            // Récupérer les réseaux
+            JSONArray networks = json.optJSONArray("networks");
+            if (networks != null && networks.length() > 0) {
+                String networkName = networks.getJSONObject(0).getString("name").toLowerCase();
+                show.setNetwork(networkName);
+            }
+            
+            // Déterminer l'âge (même logique que getShowDetails)
+            determineAgeRating(show);
+            
+            // Score par défaut (à recalculer plus tard si besoin)
+            show.setPacingScore(calculateScore(show));
+            
+            return show;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+    
+    /**
+     * Récupère les détails d'une série par son ID depuis TMDB.
+     * Essaie fr-FR puis en-US si pas de poster.
+     */
+    public ShowInfo getShowDetailsById(int id) {
+        // Essayer d'abord en français
+        ShowInfo show = searchShowById(id, "fr-FR");
+        
+        // Si pas de poster, essayer en anglais
+        if (show != null && (show.getPosterPath() == null || show.getPosterPath().isEmpty())) {
+            ShowInfo showEn = searchShowById(id, "en-US");
+            if (showEn != null && showEn.getPosterPath() != null && !showEn.getPosterPath().isEmpty()) {
+                return showEn;
+            }
+        }
+        
+        return show;
+    }
+    
+    private ShowInfo getShowDetails(int id, ShowInfo show, String lang) {
+        // Cette méthode est utilisée par searchShow avec une langue spécifique
+        String url = "https://api.themoviedb.org/3/tv/" + id
+            + "?api_key=" + tmdbApiKey
+            + "&language=" + lang;
+        
+        try {
+            String response = restTemplate.getForObject(url, String.class);
+            if (response == null) return show;
+            
             JSONObject json = new JSONObject(response);
             
             // Obtenir le réseau (pour déterminer l'âge recommandé)
             JSONArray networks = json.optJSONArray("networks");
             if (networks != null && networks.length() > 0) {
                 String networkName = networks.getJSONObject(0).getString("name").toLowerCase();
-                
-                if (networkName.contains("disney") || networkName.contains("nickelodeon")) {
-                    show.setAgeRating("6+");
-                } else if (networkName.contains("cartoon") || networkName.contains("nick")) {
-                    show.setAgeRating("3+");
-                } else {
-                    show.setAgeRating("10+");
-                }
+                show.setNetwork(networkName);
             }
             
             // Obtenir les genres
@@ -120,12 +194,12 @@ public class TMDBService {
             if (genres != null) {
                 for (int i = 0; i < genres.length(); i++) {
                     String genreName = genres.getJSONObject(i).getString("name").toLowerCase();
-                    if (genreName.contains("enfant") || genreName.contains("kids") || genreName.contains("family")) {
-                        show.setAgeRating("0+");
-                        break;
-                    }
+                    show.getGenres().add(genreName);
                 }
             }
+            
+            // Déterminer l'âge
+            determineAgeRating(show);
             
             // Calculer un score basé sur les métadonnées
             show.setPacingScore(calculateScore(show));
@@ -136,6 +210,42 @@ public class TMDBService {
         }
         
         return show;
+    }
+    
+    private ShowInfo getShowDetails(int id, ShowInfo show) {
+        // Ancienne méthode (conservée pour compatibilité) — utilise fr-FR par défaut
+        return getShowDetails(id, show, "fr-FR");
+    }
+    
+    private void determineAgeRating(ShowInfo show) {
+        String title = show.getTitle() != null ? show.getTitle().toLowerCase() : "";
+        String desc = show.getDescription() != null ? show.getDescription().toLowerCase() : "";
+        String combined = title + " " + desc;
+        
+        // Analyse basée sur le titre et description
+        if (combined.contains("bébé") || combined.contains("baby") || combined.contains("toddler") || combined.contains("tout-petit")) {
+            show.setAgeRating("0+");
+        } else if (combined.contains("prèscolaire") || combined.contains("preschool") || combined.contains("3 ans")) {
+            show.setAgeRating("3+");
+        } else if (combined.contains("enfant") || combined.contains("kids") || combined.contains("6 ans") || combined.contains("primaire")) {
+            show.setAgeRating("6+");
+        } else if (combined.contains("adolescent") || combined.contains("teen") || combined.contains("14 ans")) {
+            show.setAgeRating("14+");
+        } else {
+            // Par défaut, ajuster selon le network
+            String network = show.getNetwork();
+            if (network != null) {
+                if (network.contains("disney") || network.contains("nickelodeon")) {
+                    show.setAgeRating("6+");
+                } else if (network.contains("cartoon") || network.contains("nick")) {
+                    show.setAgeRating("3+");
+                } else {
+                    show.setAgeRating("10+");
+                }
+            } else {
+                show.setAgeRating("10+");
+            }
+        }
     }
     
     private double calculateScore(ShowInfo show) {

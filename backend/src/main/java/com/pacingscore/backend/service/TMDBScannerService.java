@@ -1,5 +1,6 @@
 package com.pacingscore.backend.service;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -18,6 +19,9 @@ public class TMDBScannerService {
     
     @Value("${tmdb.api.key}")
     private String tmdbApiKey;
+    
+    @Autowired
+    private SupabaseService supabaseService;
     
     private final RestTemplate restTemplate = new RestTemplate();
     
@@ -51,12 +55,17 @@ public class TMDBScannerService {
                 JSONObject json = new JSONObject(response);
                 JSONArray results = json.getJSONArray("results");
                 
+                System.out.println("Page " + page + " returned " + results.length() + " shows");
+                
                 for (int i = 0; i < results.length(); i++) {
                     JSONObject showJson = results.getJSONObject(i);
                     int showId = showJson.getInt("id");
+                    String title = showJson.getString("name");
+                    System.out.println("Processing: " + title + " (ID:" + showId + ")");
                     
                     // Vérifier si on a déjà cette série
                     if (showAlreadyAnalyzed(showId)) {
+                        System.out.println("  => Already exists, skipping");
                         result.alreadyAnalyzed++;
                         continue;
                     }
@@ -74,8 +83,9 @@ public class TMDBScannerService {
                         result.analyzed++;
                         result.processedShows.add(show);
                         
-                        System.out.println("✓ Analyzed: " + show.getTitle() + " (" + show.getPacingScore() + "%)");
+                        System.out.println("✓ Analyzed & saved: " + show.getTitle() + " (score:" + show.getPacingScore() + "%, age:" + show.getAgeRating() + ")");
                     } else {
+                        System.err.println("✗ Failed to get details for ID " + showId);
                         result.failed++;
                     }
                     
@@ -85,6 +95,7 @@ public class TMDBScannerService {
                 
             } catch (Exception e) {
                 System.err.println("Erreur page " + page + ": " + e.getMessage());
+                e.printStackTrace();
                 result.errors++;
             }
         }
@@ -93,20 +104,24 @@ public class TMDBScannerService {
     }
     
     private boolean showAlreadyAnalyzed(int tmdbId) {
-        // Vérifie dans la base de données
-        // Pour l'instant, retourne false (à implémenter avec Supabase)
-        return false;
+        // Utiliser SupabaseService pour vérifier si cette série existe déjà
+        return supabaseService.showExists(tmdbId);
     }
     
     private ShowInfo getShowDetails(int showId, JSONObject basicInfo) {
         try {
+            System.out.println("[DEBUG] Fetching TMDB details for ID: " + showId);
             String url = "https://api.themoviedb.org/3/tv/" + showId
                 + "?api_key=" + tmdbApiKey
                 + "&language=fr-FR";
             
             String response = restTemplate.getForObject(url, String.class);
-            JSONObject json = new JSONObject(response);
+            if (response == null) {
+                System.err.println("[ERROR] Null response from TMDB for ID " + showId);
+                return null;
+            }
             
+            JSONObject json = new JSONObject(response);
             ShowInfo show = new ShowInfo();
             show.setId(showId);
             show.setTitle(json.getString("name"));
@@ -127,8 +142,8 @@ public class TMDBScannerService {
             if (json.has("genres")) {
                 JSONArray genres = json.getJSONArray("genres");
                 for (int i = 0; i < genres.length(); i++) {
-                    String genre = genres.getJSONObject(i).getString("name").toLowerCase();
-                    show.getGenres().add(genre);
+                    String genreName = genres.getJSONObject(i).getString("name").toLowerCase();
+                    show.getGenres().add(genreName);
                 }
             }
             
@@ -142,26 +157,33 @@ public class TMDBScannerService {
             }
             
             // Récupérer les mots-clés pour l'analyse
-            String keywordUrl = "https://api.themoviedb.org/3/tv/" + showId + "/keywords"
-                + "?api_key=" + tmdbApiKey;
-            
             try {
+                String keywordUrl = "https://api.themoviedb.org/3/tv/" + showId + "/keywords"
+                    + "?api_key=" + tmdbApiKey;
                 String kwResponse = restTemplate.getForObject(keywordUrl, String.class);
-                JSONObject kwJson = new JSONObject(kwResponse);
-                JSONArray keywords = kwJson.getJSONArray("keywords");
-                
-                for (int i = 0; i < keywords.length(); i++) {
-                    String keyword = keywords.getJSONObject(i).getString("name").toLowerCase();
-                    show.getKeywords().add(keyword);
+                if (kwResponse != null) {
+                    JSONObject kwJson = new JSONObject(kwResponse);
+                    JSONArray keywords = kwJson.getJSONArray("keywords");
+                    
+                    for (int i = 0; i < keywords.length(); i++) {
+                        String keyword = keywords.getJSONObject(i).getString("name").toLowerCase();
+                        show.getKeywords().add(keyword);
+                    }
                 }
             } catch (Exception e) {
                 // Ignorer si pas de keywords
             }
             
+            // Déterminer l'âge recommandé
+            determineAgeRating(show);
+            
+            System.out.println("[DEBUG] Fetched: " + show.getTitle() + " | poster=" + show.getPosterPath() + " | age=" + show.getAgeRating());
+            
             return show;
             
         } catch (Exception e) {
             System.err.println("Erreur récupération détails ID " + showId + ": " + e.getMessage());
+            e.printStackTrace();
             return null;
         }
     }
@@ -173,8 +195,8 @@ public class TMDBScannerService {
     private double calculatePacingScore(ShowInfo show) {
         double score = 100; // Score maximal (moins de cuts = mieux)
         
-        String title = show.getTitle().toLowerCase();
-        String desc = show.getDescription().toLowerCase();
+        String title = show.getTitle() != null ? show.getTitle().toLowerCase() : "";
+        String desc = show.getDescription() != null ? show.getDescription().toLowerCase() : "";
         String combined = title + " " + desc;
         
         // ==================== CRITÈRES D'ANALYSE ====================
@@ -268,7 +290,8 @@ public class TMDBScannerService {
         
         // 8. AJUSTEMENT TRÈS JEUNES (0-3 ans)
         // Les séries pour bébés sont souvent très lentes avec peu de cuts
-        if (show.getAgeRating().equals("0+") || show.getAgeRating().equals("3+")) {
+        String ageRating = show.getAgeRating();
+        if (ageRating != null && (ageRating.equals("0+") || ageRating.equals("3+"))) {
             score += 20; // Ciblé pour les tout-petits = souvent plus calme
         }
         
@@ -304,8 +327,8 @@ public class TMDBScannerService {
     }
     
     private String determineAgeRating(ShowInfo show) {
-        String title = show.getTitle().toLowerCase();
-        String desc = show.getDescription().toLowerCase();
+        String title = show.getTitle() != null ? show.getTitle().toLowerCase() : "";
+        String desc = show.getDescription() != null ? show.getDescription().toLowerCase() : "";
         String combined = title + " " + desc;
         
         // Analyse basée sur le titre et description
@@ -324,7 +347,7 @@ public class TMDBScannerService {
         if (network != null) {
             if (network.contains("disney") || network.contains("nickelodeon")) {
                 return "6+";
-            } else if (network.contains("cartoon") || network.contains("kid")) {
+            } else if (network.contains("cartoon") || network.contains("nick")) {
                 return "3+";
             }
         }
@@ -334,8 +357,8 @@ public class TMDBScannerService {
     }
     
     private void saveToDatabase(ShowInfo show) {
-        // Appel Supabase pour sauvegarder
-        // (à implémenter avec SupabaseService)
+        // Utiliser SupabaseService pour sauvegarder
+        supabaseService.saveShowAnalysis(show);
     }
     
     // Classe interne pour stocker les résultats du scan
