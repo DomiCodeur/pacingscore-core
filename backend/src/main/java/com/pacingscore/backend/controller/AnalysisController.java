@@ -39,9 +39,9 @@ public class AnalysisController {
                    @ApiResponse(responseCode = "500", description = "Erreur serveur")
                })
     @PostMapping("/scan-tmdb")
-    public ResponseEntity<String> scanTMDB() {
+    public ResponseEntity<String> scanTMDB(@RequestParam(required = false) boolean force) {
         try {
-            TMDBScannerService.ScanResult result = tmdbScannerService.scanChildrenAnimations();
+            TMDBScannerService.ScanResult result = tmdbScannerService.scanChildrenAnimations(force);
             
             // Sauvegarder les résultats dans Supabase
             int saved = 0;

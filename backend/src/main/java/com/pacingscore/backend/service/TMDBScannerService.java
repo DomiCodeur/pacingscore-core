@@ -61,8 +61,8 @@ public class TMDBScannerService {
                     String title = showJson.getString("name");
                     System.out.println("Processing: " + title + " (ID:" + showId + ")");
                     
-                    // Vérifier si déjà analysé
-                    if (showAlreadyAnalyzed(showId)) {
+                    // Vérifier si déjà analysé (sauf si force=true)
+                    if (showAlreadyAnalyzed(showId) && !force) {
                         System.out.println(" => Already exists, skipping");
                         result.alreadyAnalyzed++;
                         continue;
@@ -290,8 +290,7 @@ public class TMDBScannerService {
             }
         }
         
-        // 3. Utilisation des genres IDs
-        List<String> genreIds = show.getGenres();
+        // 3. Utilisation des genres IDs (déjà déclaré en tête)
         // 10762 = Kids, 10751 = Family, 16 = Animation
         if (genreIds != null) {
             if (genreIds.contains("10762")) return "3+"; // Kids
