@@ -1,239 +1,90 @@
-# 🛡️ PacingScore - Kids Protection
+# 🎬 PacingScore Kids (Mollo)
 
-Video pacing analysis engine for children's content safety - **Analyse réelle des cuts de scène**.
+Le "Yuka des Dessins Animés" - Un outil pour analyser le rythme des contenus jeunesse.
 
-## ⚠️ IMPORTANT - Configuration Requise
+## 🚀 Installation Rapide
 
-Ce projet nécessite une configuration de clés API. **NE PAS** commiter le fichier `application.properties` avec des clés réelles.
-
-### Installation rapide
-
+1. Cloner le projet :
 ```bash
-# 1. Cloner le repo
-git clone https://github.com/DomiCodeur/pacingscore-core.git
-cd pacingscore-core
-
-# 2. Créer application.properties avec vos clés
-cp src/main/resources/application.properties.example src/main/resources/application.properties
-# Editer le fichier pour ajouter vos clés API
-
-# 3. Vérifier .gitignore est configuré
-cat .gitignore | grep application.properties
+git clone https://github.com/votre-compte/pacingscore-clean.git
+cd pacingscore-clean
 ```
 
-### Fichier application.properties requis
-
-```properties
-# Application local - À créer manuellement
-# Le fichier example est fourni sans clés
-
-supabase.url=https://gjkwsrzmaecmtfozkwmw.supabase.co
-supabase.key=VOTRE_CLE_SUPABASE
-
-tmdb.api.key=VOTRE_CLE_TMDB
-tmdb.api.url=https://api.themoviedb.org/3
-
-youtube.apiKey=VOTRE_CLE_YOUTUBE
-
-server.port=8080
-spring.application.name=pacingscore
-```
-
-## 🌟 La Vision
-
-**PacingScore** est le "Yuka" des contenus jeunesse. L'objectif est de protéger la santé cognitive des enfants en offrant aux parents un indicateur clair sur le niveau de stimulation visuelle des dessins animés.
-
-**Innovation technique** : Le système utilise **FFmpeg + yt-dlp** pour analyser réellement les vidéos et détecter la fréquence des cuts de scène (changements de scène), pas seulement les médonnées.
-
-**Référence** : Les séries sont récupérées via **TMDB** (themoviedb.org/u/devrick) puis analysées en temps réel.
-
-## 🎯 Méthodologie : Analyse Réelle des Cuts de Scène
-
-### ASL (Average Shot Length) - Durée Moyenne des Plans
-
-```
-ASL = Durée totale de la vidéo / Nombre de scènes détectées
-```
-
-Plus l'ASL est élevée, plus le contenu est calme et adapté aux enfants.
-
-### Échelle d'évaluation
-
-| ASL (secondes) | Score | Évaluation | Description |
-|----------------|-------|------------|-------------|
-| < 4 | < 25% | 🔴 Très stimulant | Cuts extrêmement fréquents |
-| 4-6 | 25-45% | 🟠 Stimulant | Cuts fréquents |
-| 6-8 | 45-65% | 🟡 Modéré | Cuts normaux |
-| 8-10 | 65-80% | 🟢 Calme | Cuts modérés |
-| 10-14 | 80-95% | 🟢 Très calme | Cuts rares |
-| > 14 | > 95% | 🟢 Contemplatif | Cuts très rares |
-
-### Exemples Concrets
-
-| Dessin animé | ASL | Score | Évaluation |
-|-------------|-----|-------|------------|
-| **Cocomelon** | ~2-3s | 5-15% | 🔴 Très stimulant |
-| **Baby Shark** | ~1-2s | 2-5% | 🔴 Extrêmement stimulant |
-| **Babar** | ~12-15s | 85-95% | 🟢 Très calme |
-| **Totoro** | ~15-20s | 95-98% | 🟢 Contemplatif |
-
-## 🏗️ Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                          Frontend Angular 18                             │
-└─────────────────────────────────────────────────────────────────────────┘
-                                        │
-                                        ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                        Spring Boot Backend (Java)                        │
-│  Orchestration: Récupère séries TMDB → Appelle service Python          │
-└─────────────────────────────────────────────────────────────────────────┘
-                                        │
-                                        ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                  Video Analyzer Service (Python)                         │
-│  - API Flask (port 5000)                                                │
-│  - PySceneDetect + FFmpeg pour détecter les cuts                        │
-│  - ASL = Durée totale / Nombre de scènes                                │
-└─────────────────────────────────────────────────────────────────────────┘
-                                        │
-                                        ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                     Supabase (PostgreSQL)                                │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-## 🚀 Installation
-
-### Prérequis
-
+2. Configurer les variables d'environnement :
 ```bash
-# FFmpeg (pour l'analyse vidéo)
-# Ubuntu: sudo apt-get install ffmpeg
-# macOS: brew install ffmpeg
-# Windows: https://ffmpeg.org/download.html
-
-# yt-dlp (pour télécharger les vidéos YouTube)
-pip install yt-dlp
+cp .env.example .env
+# Éditer .env avec vos API keys
 ```
 
-### Service Python (Analyse vidéo)
-
+3. Lancer avec Docker :
 ```bash
-cd video-analyzer-service
-python3 -m venv venv
-source venv/bin/activate  # Linux/Mac
-# ou
-venv\Scripts\activate     # Windows
-
-pip install -r requirements.txt
-python api.py
-# Le service est maintenant sur http://localhost:5000
+docker-compose up -d
 ```
 
-### Backend Spring Boot
+C'est tout ! L'application est accessible sur :
+- Frontend : http://localhost:9000
+- API Backend : http://localhost:8080
+- Analyseur : http://localhost:5000
 
+## 🤖 Fonctionnalités
+
+- **Auto-Update** : Les containers se mettent à jour automatiquement via Watchtower
+- **Healthchecks** : Redémarrage automatique en cas de problème
+- **Persistance** : Les données sont stockées dans Supabase
+- **Images TMDB** : Affiches officielles pour tous les contenus
+
+## 📊 Architecture
+
+- **Frontend** : Angular 16+ (port 9000)
+- **Backend** : Spring Boot 3 (port 8080)
+- **Analyzer** : Python/OpenCV (port 5000)
+- **Database** : Supabase
+- **Cache Images** : TMDB + Dailymotion fallback
+
+## 🛠 Maintenance
+
+Les containers redémarrent automatiquement en cas de crash. Pour voir les logs :
 ```bash
-# Dans le dossier racine
-./mvnw spring-boot:run
-# Le backend est sur http://localhost:8080
+docker-compose logs -f
 ```
 
-### Frontend Angular
-
+Pour forcer une mise à jour :
 ```bash
-cd frontend
-npm install
-ng serve
-# L'interface est sur http://localhost:4200
+docker-compose pull
+docker-compose up -d
 ```
 
-## 🔧 Utilisation
+## 🗃 Base de données
 
-### 1. Analyse d'une vidéo YouTube
+Les données sont dans deux tables Supabase :
+- `video_analyses` : Résultats d'analyse (frontend)
+- `analysis_results` : Queue d'analyse
 
-```bash
-curl -X POST http://localhost:5000/analyze \
-  -H "Content-Type: application/json" \
-  -d '{"video_url": "https://www.youtube.com/watch?v=VIDEO_ID"}'
-```
+## 🔄 Processus d'analyse
 
-### 2. Scan TMDB (automatique)
+1. Les vidéos sont ajoutées à la queue via `populate_clean_v2.py`
+2. L'analyseur les traite une par une
+3. Les résultats sont affichés sur le frontend
 
-```bash
-curl -X POST http://localhost:8080/api/analysis/scan-tmdb
-```
+## 🛑 Résolution de problèmes
 
-### 3. Interface Admin
+1. **Aucun contenu affiché** : 
+   ```bash
+   docker-compose restart backend
+   ```
 
-Aller sur http://localhost:4200/admin pour :
-- Lancer le scan TMDB
-- Analyser des vidéos individuelles
-- Voir les résultats
+2. **Images manquantes** : 
+   ```bash
+   docker-compose restart frontend
+   ```
 
-## 📁 Structure du projet
+3. **Analyseur bloqué** :
+   ```bash
+   docker-compose restart analyzer
+   ```
 
-```
-pacingscore-core/
-├── frontend/                    # Angular 18
-├── src/main/java/               # Spring Boot Backend
-├── video-analyzer-service/      # Service Python
-│   ├── analyzer.py             # PySceneDetect + ASL
-│   ├── api.py                  # API Flask
-│   ├── tmdb_trailer_analyzer.py
-│   ├── requirements.txt
-│   └── README.md
-├── docs/                        # Documentation
-│   ├── SECURITY.md             # Politique de sécurité
-│   └── installation.md
-└── README.md
-```
+## 📝 Limitations
 
-## 🔐 Sécurité
-
-⚠️ **IMPORTANT** : Lire `docs/SECURITY.md` avant toute contribution.
-
-- Toujours utiliser `application.properties.example` comme référence
-- Ne JAMAIS commiter de clés API
-- Utiliser les variables d'environnement en production
-- Renouveler immédiatement toute clé exposée
-
-## 📊 Technologies
-
-| Composant | Technologie | Rôle |
-|-----------|-------------|------|
-| Backend | Spring Boot 3 | Orchestration |
-| Analyse vidéo | Python + PySceneDetect | Détection cuts |
-| Téléchargement | yt-dlp | Vidéos YouTube |
-| Analyse image | FFmpeg | Détecteur de scènes |
-| Frontend | Angular 18 | Interface |
-| BDD | Supabase (PostgreSQL) | Persistance |
-| API Films | TMDB | Base données séries |
-| API YouTube | YouTube Data v3 | Métadonnées |
-
-## 🎯 Fonctionnalités
-
-- ✅ Analyse réelle des cuts de scène avec PySceneDetect
-- ✅ Métrique ASL (Average Shot Length)
-- ✅ Score basé sur la fréquence réelle des changements
-- ✅ Récupération automatique depuis TMDB
-- ✅ Interface Netflix-like pour les parents
-- ✅ Détection d'âge recommandé (0+, 3+, 6+, 10+, 14+)
-- ✅ Stockage persistant dans Supabase
-
-## 📚 Documentation
-
-- [SECURITY.md](docs/SECURITY.md) - Politique de sécurité
-- [installation.md](docs/installation.md) - Guide d'installation
-- [video-analysis-technical-spec.md](docs/video-analysis-technical-spec.md) - Spécifications techniques
-
-## 🔗 Liens
-
-- [GitHub](https://github.com/DomiCodeur/pacingscore-core)
-- [TMDB](https://www.themoviedb.org/u/devrick)
-
-
----
-
-**Projet développé pour protéger la santé cognitive des enfants** 🛡️
+- Maximum 3 épisodes par série pour éviter les doublons
+- Uniquement du contenu français ou anglais
+- Filtrage familial activé sur Dailymotion

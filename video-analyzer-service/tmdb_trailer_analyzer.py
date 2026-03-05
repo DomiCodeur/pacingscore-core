@@ -224,7 +224,7 @@ def main():
     """Exemple d'utilisation"""
     
     # Clés d'API
-    TMDB_API_KEY = "***REMOVED***"
+    TMDB_API_KEY = "65a5c670b9644a800c3d59f2885d4d4f"
     
     # Créer l'analyseur
     analyzer = TMDBTrailerAnalyzer(TMDB_API_KEY)

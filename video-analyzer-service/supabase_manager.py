@@ -1,183 +1,151 @@
-"""
-Gestionnaire Supabase pour PacingScore
+﻿"""
+Supabase Manager for PacingScore
 """
 import os
 from datetime import datetime
 from typing import Dict, Any
+
 try:
     from supabase import create_client, Client
 except ImportError:
-    print("Supabase client non installé. Installation nécessaire...")
-    # On continuera sans Supabase pour les tests locaux
+    print("Supabase client not installed. Required for production.")
+    Client = None
 
 
 class SupabaseManager:
-    """Gestionnaire de la base de données Supabase pour PacingScore"""
+    """Manages Supabase database operations for PacingScore"""
     
     def __init__(self):
-        """Initialise le client Supabase"""
+        """Initialize Supabase client"""
         from dotenv import load_dotenv
         load_dotenv()
         self.url = os.getenv("SUPABASE_URL")
-        # On privilégie la clé secrète pour les opérations d'écriture/schema
         self.key = os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_ANON_KEY")
         
         if not self.url or not self.key:
-            print("Warning: Supabase credentials not configured. Using mock mode.")
+            print("Warning: Supabase credentials missing. Using mock mode.")
             self.client = None
         else:
             try:
-                self.client: Client = create_client(self.url, self.key)
-                print("Supabase client initialized successfully")
+                self.client = create_client(self.url, self.key)
+                print("Supabase client initialized")
             except Exception as e:
-                print(f"Warning: Failed to initialize Supabase client: {e}")
+                print(f"Warning: Supabase init failed: {e}")
                 self.client = None
     
     def save_analysis_result(self, result: Dict[str, Any], video_url: str, series_title: str = None, tmdb_id: int = None, video_key: str = None) -> bool:
-        """
-        Sauvegarde les résultats d'analyse dans Supabase
-        
-        Args:
-            result: Résultat de l'analyse
-            video_url: URL de la vidéo analysée
-            series_title: Titre de la série (optionnel)
-            tmdb_id: ID TMDB unique (optionnel)
-            video_key: ID YouTube unique (optionnel)
-            
-        Returns:
-            bool: True si la sauvegarde a réussi
-        """
+        """Save analysis result to video_analyses table"""
         if not self.client:
-            print("Supabase non configuré - résultat non sauvegardé")
+            print("Supabase not configured - result not saved")
             return False
         
         try:
-            # Préparer les données pour la table analysis_results
-            analysis_data = {
-                "video_url": video_url,
-                "series_title": series_title,
-                "video_duration": result.get("video_duration"),
-                "num_scenes": result.get("num_scenes"),
-                "average_shot_length": result.get("average_shot_length"),
-                "pacing_score": result.get("pacing_score"),
-                "evaluation_label": result.get("evaluation", {}).get("label"),
-                "evaluation_description": result.get("evaluation", {}).get("description"),
-                "evaluation_color": result.get("evaluation", {}).get("color"),
-                "scene_details": result.get("scene_details", []),
-                "created_at": datetime.now().isoformat(),
-                "success": result.get("success", False),
-                "error": result.get("error"),
-                # Ajout des nouvelles metadata
-                "series_year": result.get("series_metadata", {}).get("year"),
-                "series_overview": result.get("series_metadata", {}).get("overview"),
-                "series_genres": result.get("series_metadata", {}).get("genres", []),
-                "tmdb_id": tmdb_id,  # ID unique TMDB
-                "video_key": video_key  # ID unique YouTube
+            # Determine title
+            title = series_title
+            if not title:
+                if video_url:
+                    title = video_url.split('/')[-1]
+                else:
+                    title = f"video_{result.get('video_duration', 0)}s"
+            
+            # Calculate cuts per minute
+            duration = result.get("video_duration", 0)
+            num_scenes = result.get("num_scenes", 0)
+            cuts_per_minute = (num_scenes / duration * 60) if duration > 0 else 0
+            
+            # Build metadata JSON
+            metadata = {
+                "asl": result.get("average_shot_length"),
+                "source": "python_analyzer",
+                "fr_title": title,
+                "tmdb_id": tmdb_id,
+                "display_age": result.get("series_metadata", {}).get("display_age", "0+"),
+                "description": result.get("series_overview", ""),
+                "genres": result.get("series_genres", [])
             }
             
-            # Insérer dans la table analysis_results
-            response = self.client.table("analysis_results").insert(analysis_data).execute()
+            # Build record for video_analyses
+            analysis_data = {
+                "video_path": title,
+                "pacing_score": result.get("composite_score") or result.get("pacing_score", 0),
+                "cuts_per_minute": cuts_per_minute,
+                "metadata": metadata,
+                "analyzed_at": datetime.now().isoformat(),
+                "age_rating": result.get("series_metadata", {}).get("display_age", "0+")
+            }
+            
+            # Utiliser Upsert au lieu de Insert pour éviter les doublons sur video_path
+            response = self.client.table("video_analyses").upsert(analysis_data, on_conflict="video_path").execute()
             
             if response.data:
-                print(f"✓ Résultat sauvegardé dans Supabase (ID Supabase: {response.data[0].get('id')}, TMDB: {tmdb_id})")
+                print(f"Result saved to video_analyses (ID: {response.data[0].get('id')}, Title: {title})")
                 return True
             else:
-                print("⚠ Erreur lors de la sauvegarde dans Supabase")
+                print("Failed to save to video_analyses")
                 return False
                 
         except Exception as e:
-            print(f"⚠ Erreur Supabase: {e}")
+            print(f"Supabase error: {e}")
             return False
     
     def is_already_analyzed(self, tmdb_id: int, series_title: str) -> bool:
-        """
-        Vérifie si une série/film a déjà été analysé
-        
-        Args:
-            tmdb_id: ID TMDB unique de la série
-            series_title: Titre de la série pour fallback
-            
-        Returns:
-            bool: True si déjà analysé
-        """
+        """Check if a show/movie has already been analyzed"""
         if not self.client:
             return False
         
         try:
-            # Essayer d'abord avec le tmdb_id (méthode la plus fiable)
             if tmdb_id:
-                response = self.client.table("analysis_results") \
+                response = self.client.table("video_analyses") \
                     .select("id") \
-                    .eq("tmdb_id", tmdb_id) \
+                    .eq("metadata->>tmdb_id", tmdb_id) \
                     .execute()
                 if len(response.data) > 0:
                     return True
             
-            # Fallback avec le titre si pas d'ID
             if series_title:
-                response = self.client.table("analysis_results") \
+                response = self.client.table("video_analyses") \
                     .select("id") \
-                    .eq("series_title", series_title) \
+                    .eq("metadata->>fr_title", series_title) \
                     .execute()
                 if len(response.data) > 0:
                     return True
-        
         except Exception as e:
-            print(f"⚠ Erreur vérification doublons: {e}")
+            print(f"Duplicate check error: {e}")
         
         return False
     
     def get_analysis_history(self, limit: int = 10) -> list:
-        """
-        Récupère l'historique des analyses
-        
-        Args:
-            limit: Nombre de résultats à retourner
-            
-        Returns:
-            list: Liste des analyses
-        """
+        """Get analysis history"""
         if not self.client:
-            print("Supabase non configuré - retourne liste vide")
             return []
         
         try:
-            response = self.client.table("analysis_results") \
+            response = self.client.table("video_analyses") \
                 .select("*") \
-                .order("created_at", desc=True) \
+                .order("analyzed_at", desc=True) \
                 .limit(limit) \
                 .execute()
-            
             return response.data
         except Exception as e:
-            print(f"⚠ Erreur Supabase lors de la récupération de l'historique: {e}")
+            print(f"Error fetching history: {e}")
             return []
     
     def update_analysis_status(self, analysis_id: int, status: str) -> bool:
-        """
-        Met à jour le statut d'une analyse
-        
-        Args:
-            analysis_id: ID de l'analyse
-            status: Nouveau statut
-            
-        Returns:
-            bool: True si la mise à jour a réussi
-        """
+        """Update analysis status (not used currently)"""
         if not self.client:
             return False
         
         try:
-            response = self.client.table("analysis_results") \
+            response = self.client.table("video_analyses") \
                 .update({"status": status, "updated_at": datetime.now().isoformat()}) \
                 .eq("id", analysis_id) \
                 .execute()
-            
             return len(response.data) > 0
         except Exception as e:
-            print(f"⚠ Erreur Supabase lors de la mise à jour du statut: {e}")
+            print(f"Status update error: {e}")
             return False
 
 
-# Instance globale
+# Global instance
 supabase_manager = SupabaseManager()
+

@@ -1,5 +1,5 @@
-"""
-Script pour analyser les vidéos Dailymotion et les sauvegarder dans Supabase
+﻿"""
+Script pour analyser les vidÃ©os Dailymotion et les sauvegarder dans Supabase
 """
 
 import os
@@ -8,7 +8,7 @@ import time
 from datetime import datetime
 from typing import Dict, Any, List
 
-# Ajouter le répertoire parent au path pour importer analyzer
+# Ajouter le rÃ©pertoire parent au path pour importer analyzer
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
@@ -20,7 +20,7 @@ except ImportError as e:
 
 
 def get_videos_to_analyze() -> List[Dict[str, Any]]:
-    """Récupère les vidéos Dailymotion non analysées de Supabase"""
+    """RÃ©cupÃ¨re les vidÃ©os Dailymotion non analysÃ©es de Supabase"""
     manager = SupabaseManager()
     
     if not manager.client:
@@ -29,7 +29,7 @@ def get_videos_to_analyze() -> List[Dict[str, Any]]:
     
     try:
         # Selectionner les videos Dailymotion avec success=false ET sans pacing_score
-        # (pour ne pas réanalyser les vidéos déjà échouées)
+        # (pour ne pas rÃ©analyser les vidÃ©os dÃ©jÃ  Ã©chouÃ©es)
         response = manager.client.table("analysis_results").select("*").eq("scan_type", "dailymotion_enfant").eq("success", False).is_("pacing_score", "null").execute()
         return response.data
     except Exception as e:
@@ -170,3 +170,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+

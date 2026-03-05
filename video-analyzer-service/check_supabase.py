@@ -8,7 +8,7 @@ from supabase import create_client, Client
 SUPABASE_URL = "https://gjkwsrzmaecmtfozkwmw.supabase.co"
 # The service role key is usually needed for counting/bypass RLS if anon isn't enough, 
 # but let's try the one from docker-compose first or check for others.
-SUPABASE_KEY = "***REMOVED***"
+SUPABASE_KEY = "sb_publishable_2vEhYPJjXxrqyZRbYU2kSg_20NSSJ2t"
 
 def check_results():
     try:

@@ -3,6 +3,7 @@ package com.pacingscore.controller;
 import com.pacingscore.config.SupabaseConfig;
 import com.pacingscore.service.SupabaseService;
 import com.pacingscore.service.TMDBService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.http.*;
@@ -30,6 +31,26 @@ public class ShowController {
     @Autowired
     private RestTemplate restTemplate;
     
+    // Helper method to parse metadata from Supabase
+    private Map<String, Object> parseMetadata(Object metaObj) {
+        if (metaObj == null) {
+            return new HashMap<>();
+        }
+        if (metaObj instanceof Map) {
+            return (Map<String, Object>) metaObj;
+        }
+        if (metaObj instanceof String) {
+            try {
+                ObjectMapper mapper = new ObjectMapper();
+                return mapper.readValue((String) metaObj, new com.fasterxml.jackson.core.type.TypeReference<Map<String,Object>>() {});
+            } catch (Exception e) {
+                e.printStackTrace();
+                return new HashMap<>();
+            }
+        }
+        return new HashMap<>();
+    }
+    
     @GetMapping
     public ResponseEntity<List<Map<String, Object>>> getShows(
             @RequestParam(defaultValue = "0+") String age,
@@ -40,7 +61,7 @@ public class ShowController {
         headers.set("apikey", supabaseConfig.getKey());
         headers.set("Authorization", "Bearer " + supabaseConfig.getKey());
         
-        StringBuilder query = new StringBuilder("?order=pacing_score.desc");
+        StringBuilder query = new StringBuilder("?order=pacing_score.desc&limit=200");
         if (search != null && !search.isEmpty()) {
             query.append("&title=ilike.%" + search + "%");
         }
@@ -66,7 +87,8 @@ public class ShowController {
                     
                     // 1. FORCER LE TITRE (video_path contient le nom dans ta base)
                     String title = (String) show.get("title");
-                    Map<String, Object> meta = (Map<String, Object>) show.get("metadata"); if (meta != null && meta.get("fr_title") != null) title = (String) meta.get("fr_title"); else if (title == null || title.isEmpty()) title = (String) show.get("video_path");
+                    Map<String, Object> meta = parseMetadata(show.get("metadata"));
+                    if (meta != null && meta.get("fr_title") != null) title = (String) meta.get("fr_title"); else if (title == null || title.isEmpty()) title = (String) show.get("video_path");
                     mappedShow.put("title", title);
                     
                     // 2. Mapping des scores
@@ -92,9 +114,20 @@ public class ShowController {
                     }
 
                     if (posterPath != null && !posterPath.isEmpty()) {
-                        mappedShow.put("poster_path", "https://image.tmdb.org/t/p/w500" + posterPath);
+                        if (posterPath.startsWith("http")) {
+                            mappedShow.put("poster_path", posterPath);
+                        } else {
+                            mappedShow.put("poster_path", "https://image.tmdb.org/t/p/w500" + (posterPath.startsWith("/") ? "" : "/") + posterPath);
+                        }
                     } else {
-                        mappedShow.put("poster_path", "assets/images/placeholder.png");
+                        // FALLBACK ULTIME : Miniature Dailymotion si possible, sinon image Cartoon
+                        String videoUrl = (String) show.get("video_url");
+                        if (videoUrl != null && videoUrl.contains("dailymotion.com/video/")) {
+                            String vidId = videoUrl.substring(videoUrl.lastIndexOf("/") + 1);
+                            mappedShow.put("poster_path", "https://www.dailymotion.com/thumbnail/video/" + vidId);
+                        } else {
+                            mappedShow.put("poster_path", "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&q=80");
+                        }
                     }
                     
                     // 4. Label d'évaluation

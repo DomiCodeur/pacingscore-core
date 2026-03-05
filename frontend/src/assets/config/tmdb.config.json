@@ -1,7 +1,7 @@
 {
   "api": {
     "baseUrl": "https://api.themoviedb.org/3",
-    "key": "***REMOVED***",
+    "key": "65a5c670b9644a800c3d59f2885d4d4f",
     "language": "fr-FR",
     "region": "FR"
   },
