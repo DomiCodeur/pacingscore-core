@@ -87,3 +87,10 @@ SOUL.md
 TOOLS.md
 USER.md
 memory/
+
+# Documentation technique non essentielle
+backend/src/main/resources/analysis-*.md
+backend/src/main/resources/db/
+
+# Node modules
+frontend/node_modules/
