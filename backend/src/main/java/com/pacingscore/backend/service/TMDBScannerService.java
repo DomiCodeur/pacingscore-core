@@ -87,6 +87,15 @@ public class TMDBScannerService {
                         double score = calculatePacingScore(show);
                         show.setPacingScore(score);
                         
+                        // 🛡️ VALIDATION CROISÉE : Pacing vs Âge
+                        // Si série classée 0+ ou 3+ mais pacing < 60 (trop rapide), remonter à 6+
+                        // Un bébé ne doit pas voir un programme rapide, même si les mots-clés/disney disent "0+"
+                        if ((age.equals("0+") || age.equals("3+")) && score < 60) {
+                            System.out.println(" =>[Mollo] Pacing too high for age " + age + " (score:" + score + ") → adjusting to 6+");
+                            age = "6+";
+                            show.setAgeRating(age);
+                        }
+                        
                         // Sauvegarder
                         saveToDatabase(show);
                         result.analyzed++;
@@ -231,9 +240,25 @@ public class TMDBScannerService {
      * Détermine l'âge recommandé en utilisant les certifications, les genres IDs et un mapping de titres.
      */
     private String determineAgeRating(ShowInfo show) {
-        // 1. Mapping de titres connus (priorité la plus haute)
         String titleLower = show.getTitle() != null ? show.getTitle().toLowerCase() : "";
-        String[] toddlerTitles = {"teletubbies", "petit ours brun", "babar", "dora", "peppa pig", "bluey", "paw patrol", "miffy", "totoro"};
+        String descLower = show.getDescription() != null ? show.getDescription().toLowerCase() : "";
+        List<String> genreIds = show.getGenres();
+        
+        // 0. HARD-BLACKLIST : Franchises d'action → pas en dessous de 6+
+        // Priorité absolue : si le titre contient un mot d'action, on ne peut pas être 0+ ou 3+
+        String[] actionFranchises = {"avengers", "spiderman", "spider-man", "jurassic", "ninja", "beyblade", "star wars", "justice league", "superhero", "batman", "transformers", "power rangers", "lego", " marvel"};
+        for (String brand : actionFranchises) {
+            if (titleLower.contains(brand)) {
+                // C'est une franchise d'action → minimum 6+ (voir 10+ pour les plus intenses)
+                if (brand.contains("jurassic") || brand.contains("avengers") || brand.contains("spider")) {
+                    return "10+";
+                }
+                return "6+";
+            }
+        }
+        
+        // 1. Mapping de titres connus (preschool)
+        String[] toddlerTitles = {"teletubbies", "petit ours brun", "babar", "dora", "peppa pig", "bluey", "paw patrol", "miffy", "totoro", "caillou", "franklin", "bob le bricoleur", "docteur la peluche", "bubulle guppies", "rainbow ruby"};
         for (String known : toddlerTitles) {
             if (titleLower.contains(known)) {
                 return "0+";
@@ -271,6 +296,15 @@ public class TMDBScannerService {
         if (genreIds != null) {
             if (genreIds.contains("10762")) return "3+"; // Kids
             if (genreIds.contains("10751")) return "6+"; // Family
+        }
+        
+        // 3b. Genres Action/Adventure/SciFi → minimum 6+ (sauf si certification très basse)
+        if (genreIds != null && (genreIds.contains("28") || genreIds.contains("12") || genreIds.contains("878"))) {
+            // Si on a une certification explicite (ex: TV-Y), on l'respecte
+            // Sinon, on assume que c'est au moins 6+
+            if (certs == null || certs.isEmpty()) {
+                return "6+";
+            }
         }
         
         // 4. Fallback mots-clés dans titre/description
