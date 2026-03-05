@@ -76,3 +76,14 @@ Desktop.ini
 
 # Logs
 *.log
+
+# OpenClaw workspace files (NE PAS COMMIT)
+# Ces fichiers sont pour la configuration locale de l'assistant
+.openclaw/
+AGENTS.md
+HEARTBEAT.md
+IDENTITY.md
+SOUL.md
+TOOLS.md
+USER.md
+memory/
