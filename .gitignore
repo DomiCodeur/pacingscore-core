@@ -87,6 +87,8 @@ SOUL.md
 TOOLS.md
 USER.md
 memory/
+restart.ps1
+restart.sh
 
 # Documentation technique non essentielle
 backend/src/main/resources/analysis-*.md
