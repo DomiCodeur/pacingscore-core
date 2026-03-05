@@ -9,7 +9,9 @@ import org.json.JSONObject;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class TMDBService {
@@ -93,14 +95,20 @@ public class TMDBService {
                 show.setBackdropPath(item.optString("backdrop_path"));
                 show.setFirstAirDate(item.optString("first_air_date"));
                 
-                // Obtenir les détails complets (déjà dans la langue de la recherche)
-                show = getShowDetails(show.getId(), show, lang);
+                // Récupérer les genres
+                JSONArray genres = item.optJSONArray("genre_ids");
+                if (genres != null) {
+                    for (int j = 0; j < genres.length(); j++) {
+                        show.getGenres().add(genres.getString(j));
+                    }
+                }
                 
                 shows.add(show);
             }
             
             return shows;
         } catch (Exception e) {
+            e.printStackTrace();
             return new ArrayList<>();
         }
     }
@@ -139,14 +147,10 @@ public class TMDBService {
                 show.setNetwork(networkName);
             }
             
-            // Déterminer l'âge (même logique que getShowDetails)
-            determineAgeRating(show);
-            
-            // Score par défaut (à recalculer plus tard si besoin)
-            show.setPacingScore(calculateScore(show));
-            
             return show;
+            
         } catch (Exception e) {
+            e.printStackTrace();
             return null;
         }
     }
@@ -170,120 +174,9 @@ public class TMDBService {
         return show;
     }
     
-    private ShowInfo getShowDetails(int id, ShowInfo show, String lang) {
-        // Cette méthode est utilisée par searchShow avec une langue spécifique
-        String url = "https://api.themoviedb.org/3/tv/" + id
-            + "?api_key=" + tmdbApiKey
-            + "&language=" + lang;
-        
-        try {
-            String response = restTemplate.getForObject(url, String.class);
-            if (response == null) return show;
-            
-            JSONObject json = new JSONObject(response);
-            
-            // Obtenir le réseau (pour déterminer l'âge recommandé)
-            JSONArray networks = json.optJSONArray("networks");
-            if (networks != null && networks.length() > 0) {
-                String networkName = networks.getJSONObject(0).getString("name").toLowerCase();
-                show.setNetwork(networkName);
-            }
-            
-            // Obtenir les genres
-            JSONArray genres = json.optJSONArray("genres");
-            if (genres != null) {
-                for (int i = 0; i < genres.length(); i++) {
-                    String genreName = genres.getJSONObject(i).getString("name").toLowerCase();
-                    show.getGenres().add(genreName);
-                }
-            }
-            
-            // Déterminer l'âge
-            determineAgeRating(show);
-            
-            // Calculer un score basé sur les métadonnées
-            show.setPacingScore(calculateScore(show));
-            
-        } catch (Exception e) {
-            // Score par défaut si pas de détails
-            show.setPacingScore(50);
-        }
-        
-        return show;
-    }
-    
-    private ShowInfo getShowDetails(int id, ShowInfo show) {
-        // Ancienne méthode (conservée pour compatibilité) — utilise fr-FR par défaut
-        return getShowDetails(id, show, "fr-FR");
-    }
-    
-    private void determineAgeRating(ShowInfo show) {
-        String title = show.getTitle() != null ? show.getTitle().toLowerCase() : "";
-        String desc = show.getDescription() != null ? show.getDescription().toLowerCase() : "";
-        String combined = title + " " + desc;
-        
-        // Analyse basée sur le titre et description
-        if (combined.contains("bébé") || combined.contains("baby") || combined.contains("toddler") || combined.contains("tout-petit")) {
-            show.setAgeRating("0+");
-        } else if (combined.contains("prèscolaire") || combined.contains("preschool") || combined.contains("3 ans")) {
-            show.setAgeRating("3+");
-        } else if (combined.contains("enfant") || combined.contains("kids") || combined.contains("6 ans") || combined.contains("primaire")) {
-            show.setAgeRating("6+");
-        } else if (combined.contains("adolescent") || combined.contains("teen") || combined.contains("14 ans")) {
-            show.setAgeRating("14+");
-        } else {
-            // Par défaut, ajuster selon le network
-            String network = show.getNetwork();
-            if (network != null) {
-                if (network.contains("disney") || network.contains("nickelodeon")) {
-                    show.setAgeRating("6+");
-                } else if (network.contains("cartoon") || network.contains("nick")) {
-                    show.setAgeRating("3+");
-                } else {
-                    show.setAgeRating("10+");
-                }
-            } else {
-                show.setAgeRating("10+");
-            }
-        }
-    }
-    
-    private double calculateScore(ShowInfo show) {
-        double score = 50; // Score de base
-        
-        // Mots clés du titre
-        String title = show.getTitle().toLowerCase();
-        String desc = show.getDescription().toLowerCase();
-        String combined = title + " " + desc;
-        
-        // Critères négatifs (réduisent le score)
-        if (combined.contains("action") || combined.contains("adventure") || combined.contains("super")) {
-            score -= 20;
-        }
-        if (combined.contains("fast") || combined.contains("rapide")) {
-            score -= 15;
-        }
-        
-        // Critères positifs (augmentent le score)
-        if (combined.contains("calm") || combined.contains("doux") || combined.contains("douces")) {
-            score += 20;
-        }
-        if (combined.contains("bedtime") || combined.contains("dodo") || combined.contains("sleep")) {
-            score += 15;
-        }
-        if (combined.contains("educational") || combined.contains("éducatif")) {
-            score += 10;
-        }
-        
-        // Ajustement pour les très jeunes
-        if (show.getAgeRating().equals("0+") || show.getAgeRating().equals("3+")) {
-            score += 10;
-        }
-        
-        // Limite
-        return Math.max(0, Math.min(100, score));
-    }
-    
+    /**
+     * Classe interne pour représenter une série TV TMDB
+     */
     public static class ShowInfo {
         private int id;
         private String title;
@@ -298,6 +191,8 @@ public class TMDBService {
         private List<String> genres = new ArrayList<>();
         private String network;
         private List<String> keywords = new ArrayList<>();
+        private Map<String, String> certifications = new HashMap<>();
+        private Integer episodeRuntime; // en minutes
         
         // Getters and setters
         public int getId() { return id; }
@@ -326,5 +221,9 @@ public class TMDBService {
         public void setNetwork(String network) { this.network = network; }
         public List<String> getKeywords() { return keywords; }
         public void setKeywords(List<String> keywords) { this.keywords = keywords; }
+        public Map<String, String> getCertifications() { return certifications; }
+        public void setCertifications(Map<String, String> certifications) { this.certifications = certifications; }
+        public Integer getEpisodeRuntime() { return episodeRuntime; }
+        public void setEpisodeRuntime(Integer episodeRuntime) { this.episodeRuntime = episodeRuntime; }
     }
 }

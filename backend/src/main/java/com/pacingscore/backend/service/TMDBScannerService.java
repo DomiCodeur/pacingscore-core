@@ -10,7 +10,9 @@ import org.json.JSONObject;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import com.pacingscore.backend.service.TMDBService.ShowInfo;
 
@@ -32,22 +34,18 @@ public class TMDBScannerService {
     public ScanResult scanChildrenAnimations() {
         ScanResult result = new ScanResult();
         
-        // TMDB genre IDs
-        final int ANIMATION_GENRE = 16;     // Animation
-        final int FAMILY_GENRE = 10751;     // Family
-        
-        // Pages à scanner (on peut limiter pour tester)
-        int maxPages = 5; // Scanner 5 pages de 20 résultats = 100 shows
+        // Pages à scanner
+        int maxPages = 5;
         
         for (int page = 1; page <= maxPages; page++) {
             try {
                 System.out.println("Scanning page " + page + "/" + maxPages);
                 
-                // Recherche par genre Animation + Family
+                // Découverte par genre Animation + Family
                 String discoveryUrl = "https://api.themoviedb.org/3/discover/tv"
                     + "?api_key=" + tmdbApiKey
                     + "&language=fr-FR"
-                    + "&with_genres=" + ANIMATION_GENRE + "," + FAMILY_GENRE
+                    + "&with_genres=16,10751"  // Animation + Family
                     + "&sort_by=popularity.desc"
                     + "&page=" + page;
                 
@@ -63,33 +61,44 @@ public class TMDBScannerService {
                     String title = showJson.getString("name");
                     System.out.println("Processing: " + title + " (ID:" + showId + ")");
                     
-                    // Vérifier si on a déjà cette série
+                    // Vérifier si déjà analysé
                     if (showAlreadyAnalyzed(showId)) {
-                        System.out.println("  => Already exists, skipping");
+                        System.out.println(" => Already exists, skipping");
                         result.alreadyAnalyzed++;
                         continue;
                     }
                     
-                    // Récupérer les détails
+                    // Récupérer les détails complets
                     ShowInfo show = getShowDetails(showId, showJson);
                     
                     if (show != null) {
-                        // Analyser le score
-                        show.setPacingScore(calculatePacingScore(show));
-                        show.setAgeRating(determineAgeRating(show));
+                        // Déterminer l'âge
+                        String age = determineAgeRating(show);
+                        show.setAgeRating(age);
+                        
+                        // FILTRE : ignorer les séries 14+ et 18+ (pas pour enfants)
+                        if ("14+".equals(age) || "18+".equals(age)) {
+                            System.out.println(" => Skipping (age " + age + ")");
+                            result.skippedAge++;
+                            continue;
+                        }
+                        
+                        // Calculer le score
+                        double score = calculatePacingScore(show);
+                        show.setPacingScore(score);
                         
                         // Sauvegarder
                         saveToDatabase(show);
                         result.analyzed++;
                         result.processedShows.add(show);
                         
-                        System.out.println("✓ Analyzed & saved: " + show.getTitle() + " (score:" + show.getPacingScore() + "%, age:" + show.getAgeRating() + ")");
+                        System.out.println("✓ Analyzed & saved: " + show.getTitle() + " (score:" + score + "%, age:" + age + ")");
                     } else {
                         System.err.println("✗ Failed to get details for ID " + showId);
                         result.failed++;
                     }
                     
-                    // Pause pour ne pas surcharger l'API
+                    // Pause API
                     Thread.sleep(200);
                 }
                 
@@ -104,7 +113,6 @@ public class TMDBScannerService {
     }
     
     private boolean showAlreadyAnalyzed(int tmdbId) {
-        // Utiliser SupabaseService pour vérifier si cette série existe déjà
         return supabaseService.showExists(tmdbId);
     }
     
@@ -124,30 +132,39 @@ public class TMDBScannerService {
             JSONObject json = new JSONObject(response);
             ShowInfo show = new ShowInfo();
             show.setId(showId);
-            show.setTitle(json.getString("name"));
+            String title = json.getString("name");
+            show.setTitle(title);
+            
+            // FILTRE : ignorer les titres non-latins (chinois, russe, arabe, etc.)
+            if (title != null && !title.matches(".*[a-zA-Z].*")) {
+                System.out.println(" => Skipping non-latin title: " + title);
+                return null;
+            }
+            
             show.setDescription(json.optString("overview", ""));
             show.setPosterPath(json.optString("poster_path"));
             show.setBackdropPath(json.optString("backdrop_path"));
             show.setFirstAirDate(json.optString("first_air_date"));
             
             // Récupérer les épisodes pour analyser la durée
-            if (json.has("number_of_episodes") && json.has("number_of_seasons")) {
-                int episodes = json.getInt("number_of_episodes");
-                int seasons = json.getInt("number_of_seasons");
-                show.setEpisodeCount(episodes);
-                show.setSeasonCount(seasons);
+            if (json.has("number_of_episodes") && json.getJSONArray("number_of_episodes").length() > 0) {
+                show.setEpisodeCount(json.getInt("number_of_episodes"));
+            }
+            if (json.has("number_of_seasons") && json.getJSONArray("number_of_seasons").length() > 0) {
+                show.setSeasonCount(json.getInt("number_of_seasons"));
             }
             
-            // Récupérer les genres
+            // Récupérer les genres (stocker les IDs)
             if (json.has("genres")) {
                 JSONArray genres = json.getJSONArray("genres");
                 for (int i = 0; i < genres.length(); i++) {
-                    String genreName = genres.getJSONObject(i).getString("name").toLowerCase();
-                    show.getGenres().add(genreName);
+                    JSONObject genre = genres.getJSONObject(i);
+                    // Stocker l'ID du genre (plus fiable que le nom)
+                    show.getGenres().add(String.valueOf(genre.getInt("id")));
                 }
             }
             
-            // Récupérer les réseaux pour l'âge
+            // Récupérer les réseaux
             if (json.has("networks")) {
                 JSONArray networks = json.getJSONArray("networks");
                 if (networks.length() > 0) {
@@ -156,7 +173,7 @@ public class TMDBScannerService {
                 }
             }
             
-            // Récupérer les mots-clés pour l'analyse
+            // Récupérer les mots-clés
             try {
                 String keywordUrl = "https://api.themoviedb.org/3/tv/" + showId + "/keywords"
                     + "?api_key=" + tmdbApiKey;
@@ -164,20 +181,42 @@ public class TMDBScannerService {
                 if (kwResponse != null) {
                     JSONObject kwJson = new JSONObject(kwResponse);
                     JSONArray keywords = kwJson.getJSONArray("keywords");
-                    
                     for (int i = 0; i < keywords.length(); i++) {
                         String keyword = keywords.getJSONObject(i).getString("name").toLowerCase();
                         show.getKeywords().add(keyword);
                     }
                 }
             } catch (Exception e) {
-                // Ignorer si pas de keywords
+                // Pas de keywords
             }
             
-            // Déterminer l'âge recommandé
-            determineAgeRating(show);
+            // Récupérer la durée moyenne des épisodes
+            if (json.has("episode_run_time") && json.getJSONArray("episode_run_time").length() > 0) {
+                show.setEpisodeRuntime(json.getJSONArray("episode_run_time").getInt(0));
+            }
             
-            System.out.println("[DEBUG] Fetched: " + show.getTitle() + " | poster=" + show.getPosterPath() + " | age=" + show.getAgeRating());
+            // Récupérer les certifications
+            try {
+                String certUrl = "https://api.themoviedb.org/3/tv/" + showId + "/content_ratings"
+                    + "?api_key=" + tmdbApiKey;
+                String certResponse = restTemplate.getForObject(certUrl, String.class);
+                if (certResponse != null) {
+                    JSONObject certJson = new JSONObject(certResponse);
+                    JSONArray results = certJson.getJSONArray("results");
+                    Map<String, String> certMap = new HashMap<>();
+                    for (int i = 0; i < results.length(); i++) {
+                        JSONObject c = results.getJSONObject(i);
+                        String iso = c.getString("iso_3166_1");
+                        String rating = c.getString("rating");
+                        certMap.put(iso, rating);
+                    }
+                    show.setCertifications(certMap);
+                }
+            } catch (Exception e) {
+                // Pas de certifications
+            }
+            
+            System.out.println("[DEBUG] Fetched: " + show.getTitle() + " | genres=" + show.getGenres() + " | runtime=" + show.getEpisodeRuntime());
             
             return show;
             
@@ -189,175 +228,115 @@ public class TMDBScannerService {
     }
     
     /**
-     * Calcule le score de calme basé sur la fréquence estimée des cuts de scène
-     * PRINCIPE : Moins de cuts = meilleur score
+     * Détermine l'âge recommandé en utilisant les certifications, les genres IDs et un mapping de titres.
+     */
+    private String determineAgeRating(ShowInfo show) {
+        // 1. Mapping de titres connus (priorité la plus haute)
+        String titleLower = show.getTitle() != null ? show.getTitle().toLowerCase() : "";
+        String[] toddlerTitles = {"teletubbies", "petit ours brun", "babar", "dora", "peppa pig", "bluey", "paw patrol", "miffy", "totoro"};
+        for (String known : toddlerTitles) {
+            if (titleLower.contains(known)) {
+                return "0+";
+            }
+        }
+        
+        // 2. Priorité aux certifications TMDB
+        Map<String, String> certs = show.getCertifications();
+        if (certs != null && !certs.isEmpty()) {
+            String us = certs.get("US");
+            if (us != null) {
+                switch (us) {
+                    case "TV-Y": return "0+";
+                    case "TV-Y7": return "3+";
+                    case "TV-G": return "3+";
+                    case "TV-PG": return "6+";
+                    case "TV-14": return "14+";
+                    case "TV-MA": return "18+";
+                }
+            }
+            String fr = certs.get("FR");
+            if (fr != null) {
+                if (fr.contains("Tout publics") || fr.contains("TP") || fr.contains("G") || fr.contains("0+")) {
+                    return "0+";
+                }
+                if (fr.contains("10+")) return "10+";
+                if (fr.contains("12+")) return "12+";
+                if (fr.contains("16+")) return "16+";
+            }
+        }
+        
+        // 3. Utilisation des genres IDs
+        List<String> genreIds = show.getGenres();
+        // 10762 = Kids, 10751 = Family, 16 = Animation
+        if (genreIds != null) {
+            if (genreIds.contains("10762")) return "3+"; // Kids
+            if (genreIds.contains("10751")) return "6+"; // Family
+        }
+        
+        // 4. Fallback mots-clés dans titre/description
+        String combined = titleLower + " " + show.getDescription().toLowerCase();
+        String[] toddlerWords = {"bébé", "baby", "toddler", "tout-petit", "preschool", "maternelle", "nursery", "bébin", "bebeb"};
+        for (String w : toddlerWords) {
+            if (combined.contains(w)) return "0+";
+        }
+        
+        // 5. Par défaut pour animation longue : 6+
+        return "6+";
+    }
+    
+    /**
+     * Calcule le score de calme (pacing) basé sur les métadonnées TMDB
+     * Score 0-100, plus c'est élevé = plus calme (LENT)
      */
     private double calculatePacingScore(ShowInfo show) {
-        double score = 100; // Score maximal (moins de cuts = mieux)
+        double score = 50; // base neutre
         
         String title = show.getTitle() != null ? show.getTitle().toLowerCase() : "";
         String desc = show.getDescription() != null ? show.getDescription().toLowerCase() : "";
-        String combined = title + " " + desc;
+        List<String> genres = show.getGenres();
+        Integer runtime = show.getEpisodeRuntime();
         
-        // ==================== CRITÈRES D'ANALYSE ====================
-        
-        // 1. DURÉE MOYENNE DES ÉPISODES (critère majeur)
-        // Une durée courte signifie des cuts fréquents pour capter l'attention
-        if (show.getEpisodeCount() > 0 && show.getSeasonCount() > 0) {
-            double estimatedDuration = calculateEstimatedDuration(show);
-            
-            if (estimatedDuration < 3.0) { // < 3 min
-                score -= 40; // Très cuts fréquents (mauvais pour les enfants)
-            } else if (estimatedDuration < 5.0) { // 3-5 min
-                score -= 20; // Cuts fréquents
-            } else if (estimatedDuration < 10.0) { // 5-10 min
-                score -= 10; // Cuts modérés
-            } else if (estimatedDuration > 15.0) { // > 15 min
-                score += 15; // Cuts rares (bon pour les enfants)
+        // A. Blacklist des franchises d'action → malus -50
+        String[] actionFranchises = {"lego", "ninjago", "jurassic", "avengers", "transformers", "star wars", "marvel", "spiderman", "batman", "superhero", "hero", "power rangers"};
+        for (String brand : actionFranchises) {
+            if (title.contains(brand)) {
+                score -= 50;
+                break;
             }
         }
         
-        // 2. TYPE DE CONTENU (critère majeur)
-        // La musique/dance a un rythme rapide avec beaucoup de cuts
-        if (combined.contains("music") || combined.contains("musique") || 
-            combined.contains("dance") || combined.contains("danse") || 
-            combined.contains("song") || combined.contains("chanson")) {
-            score -= 25; // Rythme très rapide
+        // B. Genres (utiliser les IDs)
+        if (genres.contains("28") || genres.contains("12") || genres.contains("878")) { // Action, Adventure, Science Fiction
+            score -= 25;
+        }
+        if (genres.contains("10762") || genres.contains("10751") || genres.contains("16")) { // Kids, Family, Animation
+            score += 15;
+        }
+        if (genres.contains("10402") || genres.contains("1052")) { // Music, Dance
+            score -= 20;
         }
         
-        // 3. MOTS-CLÉS SUGGÉRANT DES CUTS FRÉQUENTS
-        String[] fastCutKeywords = {
-            "fast", "rapide", "ultra", "hyper", "super", "explosive",
-            "fun", "funny", "comedy", "humor", "comédie",
-            "action", "adventure", "aventure", "hero",
-            "dance", "music", "musique", "chanson",
-            "exciting", "excitant", "thrilling"
-        };
-        
-        for (String keyword : fastCutKeywords) {
-            if (combined.contains(keyword)) {
-                score -= 15;
+        // C. Runtime des épisodes : bonus si court ET Kids
+        if (runtime != null) {
+            if (runtime <= 7 && (genres.contains("10762") || genres.contains("10751"))) {
+                score += 20; // mini-épisodes pour les petits = souvent calmes
+            } else if (runtime >= 15) {
+                score += 10; // épisodes longs = plus lent
             }
         }
         
-        // 4. MOTS-CLÉS SUGGÉRANT DES CUTS RARES
-        String[] calmCutKeywords = {
-            "calm", "slow", "lent", "doux", "douce",
-            "bedtime", "dodo", "sleep", "storytime",
-            "educational", "éducatif", "apprendre", "learning",
-            "story", "histoire", "narrative", "contes",
-            "gentil", "gentille", "sweet", "douceur"
-        };
-        
-        for (String keyword : calmCutKeywords) {
-            if (combined.contains(keyword)) {
-                score += 15;
-            }
+        // D. Mots-clés dans description ( termes calmes )
+        String[] slowWords = {"calme", "doux", "douceur", "contemplatif", "histoire", "éducatif", "apprendre", "bedtime", "dodo", "sommeil", "gentil", "sweet", "nursery", "learn", "educational", "relax", "apaisant"};
+        for (String w : slowWords) {
+            if (desc.contains(w)) score += 10;
         }
         
-        // 5. GENRE SPÉCIFIQUE (critère majeur)
-        for (String genre : show.getGenres()) {
-            if (genre.contains("music") || genre.contains("dance")) {
-                score -= 20;
-            } else if (genre.contains("family") || genre.contains("documentary")) {
-                score += 10;
-            } else if (genre.contains("comedy")) {
-                score -= 10;
-            }
-        }
-        
-        // 6. RÉSEAU DE DIFFUSION (YouTube = plus de cuts)
-        String network = show.getNetwork();
-        if (network != null) {
-            if (network.contains("youtube") || network.contains("netflix")) {
-                score -= 15; // YouTube/Netflix a tendance aux formats courts avec cuts fréquents
-            } else if (network.contains("disney") || network.contains("cartoon")) {
-                score -= 5; // Disney a des formats modérés
-            } else if (network.contains("educational") || network.contains("learning")) {
-                score += 15; // Chaînes éducatives = moins de cuts
-            }
-        }
-        
-        // 7. NOMBRE D'ÉPISODES (un gros nombre = tendance aux formats courts)
-        int totalEpisodes = show.getEpisodeCount();
-        if (totalEpisodes > 300) {
-            score -= 20; // Très longue série = tendance aux formats courts et cuts fréquents
-        } else if (totalEpisodes > 100) {
-            score -= 10;
-        } else if (totalEpisodes < 20) {
-            score += 10; // Courte série = peut-être plus cohérent
-        }
-        
-        // 8. AJUSTEMENT TRÈS JEUNES (0-3 ans)
-        // Les séries pour bébés sont souvent très lentes avec peu de cuts
-        String ageRating = show.getAgeRating();
-        if (ageRating != null && (ageRating.equals("0+") || ageRating.equals("3+"))) {
-            score += 20; // Ciblé pour les tout-petits = souvent plus calme
-        }
-        
-        // 9. AJUSTEMENT YOUTUBE (ajouté pour le projet)
-        // Si la série vient de YouTube, on pénalise car souvent des formats courts
-        if (title.contains("cocomelon") || title.contains("baby shark") || 
-            title.contains("cocomelon") || title.contains("lullaby")) {
-            score -= 30; // YouTube kids = très cuts fréquents
-        }
-        
-        // Limiter le score entre 0 et 100
-        return Math.max(0, Math.min(100, score));
-    }
-    
-    private double calculateEstimatedDuration(ShowInfo show) {
-        // Estimation basée sur le nombre d'épisodes et la durée totale
-        // Pour les séries très longues, la durée moyenne par épisode est souvent courte
-        int totalEpisodes = show.getEpisodeCount();
-        int seasons = show.getSeasonCount();
-        
-        if (totalEpisodes == 0) return 10.0; // Par défaut 10 min
-        
-        // Estimation : plus d'épisodes = durée moyenne plus courte
-        double estimatedMinutes = 15.0; // Moyenne de base
-        
-        if (totalEpisodes > 500) estimatedMinutes = 2.0; // Cocomelon style
-        else if (totalEpisodes > 200) estimatedMinutes = 5.0;
-        else if (totalEpisodes > 100) estimatedMinutes = 8.0;
-        else if (totalEpisodes > 50) estimatedMinutes = 10.0;
-        else estimatedMinutes = 12.0;
-        
-        return estimatedMinutes;
-    }
-    
-    private String determineAgeRating(ShowInfo show) {
-        String title = show.getTitle() != null ? show.getTitle().toLowerCase() : "";
-        String desc = show.getDescription() != null ? show.getDescription().toLowerCase() : "";
-        String combined = title + " " + desc;
-        
-        // Analyse basée sur le titre et description
-        if (combined.contains("bébé") || combined.contains("baby") || combined.contains("toddler") || combined.contains("tout-petit")) {
-            return "0+";
-        } else if (combined.contains("prèscolaire") || combined.contains("preschool") || combined.contains("3 ans")) {
-            return "3+";
-        } else if (combined.contains("enfant") || combined.contains("kids") || combined.contains("6 ans") || combined.contains("primaire")) {
-            return "6+";
-        } else if (combined.contains("adolescent") || combined.contains("teen") || combined.contains("14 ans")) {
-            return "14+";
-        }
-        
-        // Détection par réseau
-        String network = show.getNetwork();
-        if (network != null) {
-            if (network.contains("disney") || network.contains("nickelodeon")) {
-                return "6+";
-            } else if (network.contains("cartoon") || network.contains("nick")) {
-                return "3+";
-            }
-        }
-        
-        // Par défaut
-        return "10+";
+        // E. Sanity Check
+        score = Math.max(5, Math.min(95, score));
+        return score;
     }
     
     private void saveToDatabase(ShowInfo show) {
-        // Utiliser SupabaseService pour sauvegarder
         supabaseService.saveShowAnalysis(show);
     }
     
@@ -367,6 +346,7 @@ public class TMDBScannerService {
         public int alreadyAnalyzed = 0;
         public int failed = 0;
         public int errors = 0;
+        public int skippedAge = 0; // nouvelles séries skipées car 14+/18+
         public List<ShowInfo> processedShows = new ArrayList<>();
         
         @Override
@@ -376,6 +356,7 @@ public class TMDBScannerService {
                 ", alreadyAnalyzed=" + alreadyAnalyzed +
                 ", failed=" + failed +
                 ", errors=" + errors +
+                ", skippedAge=" + skippedAge +
                 ", total=" + processedShows.size() +
                 '}';
         }
