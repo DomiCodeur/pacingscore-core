@@ -1,14 +1,16 @@
-package com.pacingscore.controller;
+package com.pacingscore.backend.controller;
 
-import com.pacingscore.service.YouTubeCrawlerService;
-import com.pacingscore.service.TMDBService;
-import com.pacingscore.service.TMDBScannerService;
-import com.pacingscore.service.SupabaseService;
-import com.pacingscore.service.TMDBScannerService.ScanResult;
-import com.pacingscore.service.TMDBService.ShowInfo;
+import com.pacingscore.backend.service.TMDBService;
+import com.pacingscore.backend.service.TMDBScannerService;
+import com.pacingscore.backend.service.SupabaseService;
+import com.pacingscore.backend.service.TMDBScannerService.ScanResult;
+import com.pacingscore.backend.service.TMDBService.ShowInfo;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.*;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -18,33 +20,24 @@ import java.util.List;
 public class AnalysisController {
     
     @Autowired
-    private YouTubeCrawlerService crawlerService;
-    
-    @Autowired
-    private TMDBService tmdbService;
-    
-    @Autowired
     private TMDBScannerService tmdbScannerService;
     
     @Autowired
     private SupabaseService supabaseService;
     
-    /**
-     * Endpoint pour démarrer l'analyse automatique
-     * Recherche et analyse des vidéos YouTube
-     */
-    @PostMapping("/crawl")
-    public ResponseEntity<List<YouTubeCrawlerService.VideoAnalysis>> crawlAndAnalyze(
-            @RequestParam String searchTerm) {
-        
-        List<YouTubeCrawlerService.VideoAnalysis> results = crawlerService.crawlAndAnalyze(searchTerm);
-        return ResponseEntity.ok(results);
-    }
+    @Autowired
+    private TMDBService tmdbService;
     
     /**
      * Endpoint pour scanner TOUS les dessins animés pour enfants sur TMDB
      * et les analyser automatiquement
      */
+    @Operation(summary = "Scan automatique des dessins animés sur TMDB",
+               description = "Scanne automatiquement tous les dessins animés pour enfants sur TMDB et les analyse",
+               responses = {
+                   @ApiResponse(responseCode = "200", description = "Scan terminé", content = @Content(mediaType = "text/plain")),
+                   @ApiResponse(responseCode = "500", description = "Erreur serveur")
+               })
     @PostMapping("/scan-tmdb")
     public ResponseEntity<String> scanTMDB() {
         try {
@@ -78,6 +71,12 @@ public class AnalysisController {
     /**
      * Endpoint pour populer avec une liste spécifique de dessins animés
      */
+    @Operation(summary = "Peuplement automatique de la base",
+               description = "Récupère des dessins animés enfants depuis TMDB et les sauvegarde dans Supabase",
+               responses = {
+                   @ApiResponse(responseCode = "200", description = "Population terminée", content = @Content(mediaType = "text/plain")),
+                   @ApiResponse(responseCode = "500", description = "Erreur serveur")
+               })
     @PostMapping("/populate")
     public ResponseEntity<String> populateDatabase() {
         try {
@@ -111,30 +110,5 @@ public class AnalysisController {
         } catch (Exception e) {
             return ResponseEntity.status(500).body("Erreur: " + e.getMessage());
         }
-    }
-    
-    /**
-     * Endpoint pour rechercher des vidéos par catégorie
-     */
-    @GetMapping("/search")
-    public ResponseEntity<List<YouTubeCrawlerService.VideoAnalysis>> search(
-            @RequestParam String query,
-            @RequestParam(defaultValue = "0+") String age,
-            @RequestParam(defaultValue = "0") double minScore) {
-        
-        // Filtrer les résultats
-        List<YouTubeCrawlerService.VideoAnalysis> results = crawlerService.crawlAndAnalyze(query);
-        
-        // Filtrer par âge
-        if (!age.equals("0+")) {
-            results.removeIf(vid -> !vid.getAgeRating().equals(age));
-        }
-        
-        // Filtrer par score minimum
-        if (minScore > 0) {
-            results.removeIf(vid -> vid.getPacingScore() < minScore);
-        }
-        
-        return ResponseEntity.ok(results);
     }
 }

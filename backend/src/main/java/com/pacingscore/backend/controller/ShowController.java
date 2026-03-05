@@ -1,12 +1,22 @@
-package com.pacingscore.controller;
+package com.pacingscore.backend.controller;
 
-import com.pacingscore.config.SupabaseConfig;
-import com.pacingscore.service.SupabaseService;
-import com.pacingscore.service.TMDBService;
+import com.pacingscore.backend.config.SupabaseConfig;
+import com.pacingscore.backend.service.SupabaseService;
+import com.pacingscore.backend.service.TMDBService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.enums.ParameterIn;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.http.*;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
@@ -51,10 +61,20 @@ public class ShowController {
         return new HashMap<>();
     }
     
+    @Operation(summary = "Récupère la liste des vidéos analysées",
+               description = "Retourne une liste paginée de vidéos avec leurs scores de rythme, images et métadonnées. Tri par score décroissant.",
+               responses = {
+                   @ApiResponse(responseCode = "200", description = "Liste récupérée avec succès",
+                       content = @Content(mediaType = "application/json")),
+                   @ApiResponse(responseCode = "500", description = "Erreur serveur")
+               })
     @GetMapping
     public ResponseEntity<List<Map<String, Object>>> getShows(
+            @Parameter(in = ParameterIn.QUERY, description = "Tranche d'âge recommandée (ex: 0+, 3+, 6+, 10+, 16+)", schema = @Schema(type = "string", defaultValue = "0+"))
             @RequestParam(defaultValue = "0+") String age,
+            @Parameter(in = ParameterIn.QUERY, description = "Score minimum de rythme (0-100)", schema = @Schema(type = "number", defaultValue = "0"))
             @RequestParam(defaultValue = "0") double minScore,
+            @Parameter(in = ParameterIn.QUERY, description = "Filtrer par titre (recherche partielle)", schema = @Schema(type = "string"))
             @RequestParam(required = false) String search) {
         
         HttpHeaders headers = new HttpHeaders();

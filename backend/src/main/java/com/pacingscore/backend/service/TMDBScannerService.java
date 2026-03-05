@@ -1,4 +1,4 @@
-package com.pacingscore.service;
+package com.pacingscore.backend.service;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -11,7 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.pacingscore.service.TMDBService.ShowInfo;
+import com.pacingscore.backend.service.TMDBService.ShowInfo;
 
 @Service
 public class TMDBScannerService {

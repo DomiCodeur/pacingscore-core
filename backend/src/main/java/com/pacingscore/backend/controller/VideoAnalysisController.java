@@ -1,9 +1,15 @@
-package com.pacingscore.controller;
+package com.pacingscore.backend.controller;
 
-import com.pacingscore.service.VideoAnalyzerService;
+import com.pacingscore.backend.service.VideoAnalyzerService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.enums.ParameterIn;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.*;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
@@ -19,8 +25,16 @@ public class VideoAnalysisController {
      * Analyse une vidéo YouTube en temps réel
      * Détecte les cuts de scène et calcule le score
      */
+    @Operation(summary = "Analyse une vidéo YouTube",
+               description = "Détecte les cuts de scène et calcule un score de rythme (pacing score)",
+               responses = {
+                   @ApiResponse(responseCode = "200", description = "Analyse terminée", content = @Content(mediaType = "application/json")),
+                   @ApiResponse(responseCode = "500", description = "Erreur serveur")
+               })
     @PostMapping("/analyze")
-    public ResponseEntity<Map<String, Object>> analyzeVideo(@RequestParam String videoUrl) {
+    public ResponseEntity<Map<String, Object>> analyzeVideo(
+            @Parameter(in = ParameterIn.QUERY, description = "URL de la vidéo YouTube", required = true, schema = @Schema(type = "string"))
+            @RequestParam String videoUrl) {
         try {
             VideoAnalyzerService.VideoAnalysisResult result = videoAnalyzer.analyzeVideo(videoUrl);
             
@@ -51,6 +65,11 @@ public class VideoAnalysisController {
     /**
      * Analyse un batch de vidéos
      */
+    @Operation(summary = "Analyse en batch (future)",
+               description = "Endpoint réservé pour l'analyse de plusieurs vidéos en parallèle",
+               responses = {
+                   @ApiResponse(responseCode = "200", description = "Endpoint en construction", content = @Content(mediaType = "application/json"))
+               })
     @PostMapping("/analyze-batch")
     public ResponseEntity<Map<String, Object>> analyzeBatch(@RequestBody Map<String, Object> request) {
         // Pour l'implémentation future

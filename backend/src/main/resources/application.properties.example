@@ -1,24 +1,22 @@
-# Configuration PacingScore - Fichier d'exemple
-# ⚠️ CRITIQUE : Créer un fichier application.properties local avec vos clés
-# ⚠️ CE FICHIER NE CONTIENT PAS DE CLÉS SENSIBLES
+# Configuration d'exemple pour PacingScore Backend
+# ⚠️ Copiez ce fichier en application.properties et remplacez les valeurs par vos vraies clés
+# Ou utilisez les variables d'environnement correspondantes
 
-# Supabase Configuration
-# Aller sur https://supabase.com/ pour créer votre projet
-supabase.url=https://gjkwsrzmaecmtfozkwmw.supabase.co
-supabase.key=VOTRE_CLE_SUPABASE_ICI
+# Supabase
+supabase.url=https://votre-projet.supabase.co
+supabase.key=sb_publishable_...
 
-# TMDB Configuration (The Movie Database)
-# Aller sur https://www.themoviedb.org/settings/api
-tmdb.api.key=VOTRE_CLE_TMDB_ICI
+# TMDB
+tmdb.api.key=your_tmdb_api_key_here
 tmdb.api.url=https://api.themoviedb.org/3
 
-# Video Analyzer Configuration
+# Analyzer
 video.analyzer.temp-dir=./temp/videos
 video.analyzer.max-duration=300
 
-# Application Server
+# Server
 server.port=8080
 spring.application.name=pacingscore
 
 # Logging
-logging.level.com.pacingscore=DEBUG
+logging.level.com.pacingscore=INFO

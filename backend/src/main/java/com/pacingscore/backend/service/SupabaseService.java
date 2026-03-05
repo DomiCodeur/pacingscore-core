@@ -1,6 +1,6 @@
-package com.pacingscore.service;
+package com.pacingscore.backend.service;
 
-import com.pacingscore.config.SupabaseConfig;
+import com.pacingscore.backend.config.SupabaseConfig;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
