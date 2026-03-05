@@ -287,52 +287,73 @@ public class TMDBScannerService {
     /**
      * Calcule le score de calme (pacing) basé sur les métadonnées TMDB
      * Score 0-100, plus c'est élevé = plus calme (LENT)
+     * Nouvelle logique Mollo : partir de 50, bonus pour preschool/kids, malus pour genres rapides
      */
     private double calculatePacingScore(ShowInfo show) {
-        double score = 50; // base neutre
+        // Nouvelle logique Mollo : partir de 50 (neutre)
+        double score = 50;
         
         String title = show.getTitle() != null ? show.getTitle().toLowerCase() : "";
         String desc = show.getDescription() != null ? show.getDescription().toLowerCase() : "";
         List<String> genres = show.getGenres();
         Integer runtime = show.getEpisodeRuntime();
+        String ageRating = show.getAgeRating(); // déjà déterminé
         
-        // A. Blacklist des franchises d'action → malus -50
-        String[] actionFranchises = {"lego", "ninjago", "jurassic", "avengers", "transformers", "star wars", "marvel", "spiderman", "batman", "superhero", "hero", "power rangers"};
-        for (String brand : actionFranchises) {
-            if (title.contains(brand)) {
-                score -= 50;
-                break;
-            }
-        }
+        // Déterminer is_preschool et is_kids
+        boolean isPreschool = "0+".equals(ageRating);
+        boolean isKids = isPreschool || "3+".equals(ageRating) || "6+".equals(ageRating)
+                         || genres.contains("10762") || genres.contains("10751");
         
-        // B. Genres (utiliser les IDs)
-        if (genres.contains("28") || genres.contains("12") || genres.contains("878")) { // Action, Adventure, Science Fiction
-            score -= 25;
+        // BONUS de calme
+        if (isPreschool) {
+            score += 30;
         }
-        if (genres.contains("10762") || genres.contains("10751") || genres.contains("16")) { // Kids, Family, Animation
+        if (isKids && runtime != null && runtime < 10) {
             score += 15;
         }
-        if (genres.contains("10402") || genres.contains("1052")) { // Music, Dance
+        
+        // MALUS de vitesse
+        // Slapstick : chercher dans keywords ou description
+        boolean hasSlapstick = false;
+        if (show.getKeywords() != null) {
+            for (String kw : show.getKeywords()) {
+                String kwLower = kw.toLowerCase();
+                if (kwLower.contains("slapstick") || kwLower.contains("absurd humour") || kwLower.contains("cartoon violence")) {
+                    hasSlapstick = true;
+                    break;
+                }
+            }
+        }
+        if (!hasSlapstick) {
+            String combined = title + " " + desc;
+            if (combined.contains("slapstick") || combined.contains("absurd humour") || combined.contains("cartoon violence") || combined.contains("chase") || combined.contains("fight")) {
+                hasSlapstick = true;
+            }
+        }
+        if (hasSlapstick) {
+            score -= 40;
+        }
+        
+        // Action (genre ID 28)
+        if (genres.contains("28")) {
+            score -= 30;
+        }
+        
+        // Comedy (genre ID 35) et pas Kids
+        if (genres.contains("35") && !isKids) {
             score -= 20;
         }
         
-        // C. Runtime des épisodes : bonus si court ET Kids
-        if (runtime != null) {
-            if (runtime <= 7 && (genres.contains("10762") || genres.contains("10751"))) {
-                score += 20; // mini-épisodes pour les petits = souvent calmes
-            } else if (runtime >= 15) {
-                score += 10; // épisodes longs = plus lent
+        // Plafonner à 60 pour Action/Comedy (sans analyse vidéo)
+        if (genres.contains("28") || genres.contains("35")) {
+            if (score > 60) {
+                score = 60;
             }
         }
         
-        // D. Mots-clés dans description ( termes calmes )
-        String[] slowWords = {"calme", "doux", "douceur", "contemplatif", "histoire", "éducatif", "apprendre", "bedtime", "dodo", "sommeil", "gentil", "sweet", "nursery", "learn", "educational", "relax", "apaisant"};
-        for (String w : slowWords) {
-            if (desc.contains(w)) score += 10;
-        }
+        // Limiter entre 0 et 100
+        score = Math.max(0, Math.min(100, score));
         
-        // E. Sanity Check
-        score = Math.max(5, Math.min(95, score));
         return score;
     }
     
