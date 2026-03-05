@@ -12,10 +12,6 @@ supabase.key=VOTRE_CLE_SUPABASE_ICI
 tmdb.api.key=VOTRE_CLE_TMDB_ICI
 tmdb.api.url=https://api.themoviedb.org/3
 
-# YouTube API Key
-# Aller sur https://console.cloud.google.com/apis/credentials
-youtube.apiKey=VOTRE_CLE_YOUTUBE_ICI
-
 # Video Analyzer Configuration
 video.analyzer.temp-dir=./temp/videos
 video.analyzer.max-duration=300
