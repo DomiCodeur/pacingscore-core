@@ -41,6 +41,34 @@ video-analyzer-service/*.pyc
 video-analyzer-service/temp/
 video-analyzer-service/*.mp4
 video-analyzer-service/analysis_results.json
+# Scripts de maintenance et debug (ne pas commiter)
+video-analyzer-service/check_*.py
+video-analyzer-service/clean_*.py
+video-analyzer-service/populate_*.py
+video-analyzer-service/mollo_*.py
+video-analyzer-service/search_*.py
+video-analyzer-service/debug_*.py
+video-analyzer-service/test_*.py
+video-analyzer-service/tmdb_*.py
+video-analyzer-service/find_*.py
+video-analyzer-service/final_*.py
+video-analyzer-service/restructure_*.py
+video-analyzer-service/apply_*.py
+video-analyzer-service/fix_*.py
+video-analyzer-service/add_*.py
+video-analyzer-service/create_*.py
+video-analyzer-service/save_*.py
+video-analyzer-service/video_count.txt
+video-analyzer-service/diagnostic_results.json
+video-analyzer-service/monitor*.ps1
+video-analyzer-service/monitor*.sh
+video-analyzer-service/*.env
+video-analyzer-service/local_config.py
+video-analyzer-service/secrets.py
+video-analyzer-service/credentials.json
+video-analyzer-service/*key*.py
+video-analyzer-service/*token*.py
+video-analyzer-service/*secret*.py
 
 # Windows
 Thumbs.db

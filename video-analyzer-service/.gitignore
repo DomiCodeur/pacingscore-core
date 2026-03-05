@@ -1,0 +1,50 @@
+# Video Analyzer Service - Fichiers locaux non commités
+
+# Virtual environment
+venv/
+env/
+
+# Temp files
+temp/
+*.mp4
+*.log
+analysis_results.json
+
+# Scripts de maintenance et debug (NE PAS COMMIT)
+# Ces fichiers sont pour usage local uniquement
+check_*.py
+clean_*.py
+populate_*.py
+mollo_*.py
+search_*.py
+debug_*.py
+test_*.py
+tmdb_*.py
+find_*.py
+final_*.py
+restructure_*.py
+apply_*.py
+fix_*.py
+add_*.py
+create_*.py
+save_*.py
+video_count.txt
+diagnostic_results.json
+monitor*.ps1
+monitor*.sh
+
+# Credentials - ne jamais commit les clés réelles
+*.env
+local_config.py
+secrets.py
+credentials.json
+*key*.py
+*token*.py
+*secret*.py
+
+# IDE
+.idea/
+.vscode/
+*.iml
+__pycache__/
+*.pyc
