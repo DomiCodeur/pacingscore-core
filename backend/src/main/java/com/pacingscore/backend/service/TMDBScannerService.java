@@ -147,10 +147,10 @@ public class TMDBScannerService {
             show.setFirstAirDate(json.optString("first_air_date"));
             
             // Récupérer les épisodes pour analyser la durée
-            if (json.has("number_of_episodes") && json.getJSONArray("number_of_episodes").length() > 0) {
+            if (json.has("number_of_episodes") && !json.isNull("number_of_episodes")) {
                 show.setEpisodeCount(json.getInt("number_of_episodes"));
             }
-            if (json.has("number_of_seasons") && json.getJSONArray("number_of_seasons").length() > 0) {
+            if (json.has("number_of_seasons") && !json.isNull("number_of_seasons")) {
                 show.setSeasonCount(json.getInt("number_of_seasons"));
             }
             
