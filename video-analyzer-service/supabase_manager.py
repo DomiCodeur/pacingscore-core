@@ -119,6 +119,7 @@ class SupabaseManager:
         return response is not None and response.status_code in (200, 204)
     
     def save_mollo_score(self, tmdb_id: str, real_score: float, asl: float, video_url: str, scene_details: List[Dict],
+                         source: str = None, video_type: str = None,
                          cuts_per_minute: float = None, video_duration: float = None, motion_intensity: float = None) -> bool:
         """Save the actual Mollo score to mollo_scores table (upsert on tmdb_id)"""
         data = {
@@ -130,6 +131,10 @@ class SupabaseManager:
             "analyzed_at": datetime.now().isoformat()
         }
         # Include optional fields if provided
+        if source is not None:
+            data["source"] = source
+        if video_type is not None:
+            data["video_type"] = video_type
         if cuts_per_minute is not None:
             data["cuts_per_minute"] = cuts_per_minute
         if video_duration is not None:

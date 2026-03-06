@@ -24,6 +24,8 @@ export interface Show {
   video_duration?: number | null;
   cuts_per_minute?: number | null;
   motion_intensity?: number | null;
+  source?: string; // 'youtube', 'dailymotion', etc.
+  video_type?: string; // 'episode', 'film', 'extrait', etc.
 }
 
 @Injectable({
@@ -72,5 +74,18 @@ export class SpringBootService {
    */
   getShowById(id: number): Observable<Show | undefined> {
     return this.http.get<Show | undefined>(`${this.apiUrl}/shows/${id}`);
+  }
+  
+  /**
+   * Récupérer les derniers shows ajoutés
+   * @param limit nombre d'éléments
+   * @param type filtre optionnel 'movie' ou 'tv'
+   */
+  getLatestShows(limit: number = 10, type?: 'movie' | 'tv'): Observable<Show[]> {
+    let url = `${this.apiUrl}/shows/latest?limit=${limit}`;
+    if (type) {
+      url += `&type=${type}`;
+    }
+    return this.http.get<Show[]>(url);
   }
 }

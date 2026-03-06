@@ -7,7 +7,9 @@ import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.net.URI;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -22,17 +24,18 @@ public class SupabaseService {
     
     /**
      * Save a show estimation from TMDB into metadata_estimations table
+     * Uses upsert on tmdb_id to avoid duplicates.
      */
     public void saveMetadataEstimation(ShowInfo show) {
         String endpoint = supabaseConfig.getUrl() + "/rest/v1/metadata_estimations";
-        
+
         Map<String, Object> data = new HashMap<>();
         data.put("tmdb_id", String.valueOf(show.getId()));
         data.put("title", show.getTitle());
         data.put("estimated_score", show.getPacingScore());
         data.put("age_rating_guess", show.getAgeRating());
         data.put("media_type", show.getMediaType()); // "movie" ou "tv"
-        
+
         // Build metadata JSONB
         Map<String, Object> metadata = new HashMap<>();
         metadata.put("description", show.getDescription());
@@ -49,19 +52,21 @@ public class SupabaseService {
         metadata.put("certifications", show.getCertifications());
         metadata.put("episode_count", show.getEpisodeCount());
         metadata.put("season_count", show.getSeasonCount());
-        
+
         data.put("metadata", metadata);
-        
+
         HttpHeaders headers = new HttpHeaders();
         headers.set("apikey", supabaseConfig.getKey());
         headers.set("Authorization", "Bearer " + supabaseConfig.getKey());
         headers.setContentType(MediaType.APPLICATION_JSON);
-        
+        headers.set("Prefer", "resolution=merge-duplicates"); // upsert
+
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(data, headers);
-        
+
         try {
-            restTemplate.postForEntity(endpoint, request, String.class);
-            System.out.println("Estimation saved: " + show.getTitle() + " (type: " + show.getMediaType() + ")");
+            URI uri = new URI(endpoint + "?on_conflict=tmdb_id");
+            restTemplate.postForEntity(uri, request, String.class);
+            System.out.println("Estimation saved/upserted: " + show.getTitle() + " (type: " + show.getMediaType() + ")");
         } catch (Exception e) {
             System.err.println("Error saving estimation: " + show.getTitle() + " - " + e.getMessage());
         }
@@ -69,24 +74,29 @@ public class SupabaseService {
     
     /**
      * Create a video analysis task for the Python worker
+     * Includes media_type to help worker choose search strategy
      */
-    public void createAnalysisTask(int tmdbId) {
+    public void createAnalysisTask(int tmdbId, String mediaType) {
         String endpoint = supabaseConfig.getUrl() + "/rest/v1/analysis_tasks";
-        
+
         Map<String, Object> data = new HashMap<>();
         data.put("tmdb_id", String.valueOf(tmdbId));
+        data.put("media_type", mediaType); // "movie" ou "tv"
         // status defaults to 'pending' in DB
-        
+
         HttpHeaders headers = new HttpHeaders();
         headers.set("apikey", supabaseConfig.getKey());
         headers.set("Authorization", "Bearer " + supabaseConfig.getKey());
         headers.setContentType(MediaType.APPLICATION_JSON);
-        
+        headers.set("Prefer", "resolution=merge-duplicates"); // upsert on conflict
+
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(data, headers);
-        
+
         try {
-            restTemplate.postForEntity(endpoint, request, String.class);
-            System.out.println("Analysis task created for TMDB ID: " + tmdbId);
+            // Add on_conflict=tmdb_id to avoid duplicate key errors
+            URI uri = new URI(endpoint + "?on_conflict=tmdb_id");
+            restTemplate.postForEntity(uri, request, String.class);
+            System.out.println("Analysis task created/upserted for TMDB ID: " + tmdbId + " (type: " + mediaType + ")");
         } catch (Exception e) {
             System.err.println("Error creating task for TMDB ID " + tmdbId + ": " + e.getMessage());
         }
@@ -106,18 +116,14 @@ public class SupabaseService {
         HttpEntity<String> request = new HttpEntity<>(headers);
         
         try {
-            String url = endpoint + "?tmdb_id=eq." + tmdbId;
-            ResponseEntity<String> response = restTemplate.exchange(
-                url, HttpMethod.GET, request, String.class
+            String url = endpoint + "?tmdb_id=eq." + tmdbId + "&select=tmdb_id";
+            ResponseEntity<List> response = restTemplate.exchange(
+                url, HttpMethod.GET, request, List.class
             );
-            
-            String count = response.getHeaders().getFirst("Content-Range");
-            if (count != null) {
-                String[] parts = count.split("/");
-                return Integer.parseInt(parts[0]) > 0;
-            }
-            return false;
+            List<?> body = response.getBody();
+            return body != null && !body.isEmpty();
         } catch (Exception e) {
+            e.printStackTrace();
             return false;
         }
     }

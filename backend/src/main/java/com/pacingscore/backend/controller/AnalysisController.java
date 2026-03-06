@@ -41,27 +41,28 @@ public class AnalysisController {
     @PostMapping("/scan-tmdb")
     public ResponseEntity<String> scanTMDB(@RequestParam(required = false) boolean force) {
         try {
-            TMDBScannerService.ScanResult result = tmdbScannerService.scanChildrenAnimations(force);
+            TMDBScannerService.ScanResult tvResult = tmdbScannerService.scanChildrenAnimations(force);
+            TMDBScannerService.ScanResult movieResult = tmdbScannerService.scanMovies(force);
             
-            // Sauvegarder les résultats dans Supabase
-            int saved = 0;
-            for (ShowInfo show : result.processedShows) {
-                try {
-                    // TODO: Implémenter la sauvegarde via SupabaseService
-                    // supabaseService.saveShowAnalysis(show);
-                    saved++;
-                } catch (Exception e) {
-                    System.err.println("Erreur sauvegarde " + show.getTitle() + ": " + e.getMessage());
-                }
-            }
+            int totalAnalyzed = tvResult.analyzed + movieResult.analyzed;
+            int totalAlready = tvResult.alreadyAnalyzed + movieResult.alreadyAnalyzed;
+            int totalFailed = tvResult.failed + movieResult.failed;
+            int totalProcessed = tvResult.processedShows.size() + movieResult.processedShows.size();
             
             return ResponseEntity.ok(
                 "Scan TMDB terminé!\n" +
-                "- Dessins animés analysés: " + result.analyzed + "\n" +
-                "- Déjà présents: " + result.alreadyAnalyzed + "\n" +
-                "- Échecs: " + result.failed + "\n" +
-                "- Sauvegardés: " + saved + "\n" +
-                "- Total traité: " + result.processedShows.size()
+                "--- Séries TV ---\n" +
+                "  Analysés: " + tvResult.analyzed + "\n" +
+                "  Déjà présents: " + tvResult.alreadyAnalyzed + "\n" +
+                "  Échoués: " + tvResult.failed + "\n" +
+                "--- Films ---\n" +
+                "  Analysés: " + movieResult.analyzed + "\n" +
+                "  Déjà présents: " + movieResult.alreadyAnalyzed + "\n" +
+                "  Échoués: " + movieResult.failed + "\n" +
+                "--- Total ---\n" +
+                "  Nouvelles entrées: " + totalAnalyzed + "\n" +
+                "  Total traité: " + totalProcessed + "\n" +
+                "  Erreurs: " + totalFailed
             );
         } catch (Exception e) {
             return ResponseEntity.status(500).body("Erreur lors du scan: " + e.getMessage());
@@ -93,7 +94,7 @@ public class AnalysisController {
                     try {
                         // Nouvelle architecture : sauver l'estimation + créer une tâche d'analyse
                         supabaseService.saveMetadataEstimation(show);
-                        supabaseService.createAnalysisTask(show.getId());
+                        supabaseService.createAnalysisTask(show.getId(), show.getMediaType());
                         saved++;
                         Thread.sleep(500); // Pause pour respecter les limites d'API
                     } catch (Exception e) {

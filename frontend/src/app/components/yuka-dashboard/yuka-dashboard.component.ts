@@ -130,9 +130,14 @@ import { SpringBootService, Show } from '../../services/spring-boot.service';
 
         <!-- Results Header -->
         <div class="flex items-center justify-between mb-6 border-b border-gray-200 pb-4">
-          <h3 class="text-xl font-bold text-gray-900" id="resultsTitle">
-            {{ getResultsTitle() }}
-          </h3>
+          <div class="flex items-center gap-4">
+            <button (click)="loadLatestShows()" class="px-4 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-semibold hover:bg-green-200 transition-colors">
+              Nouveautés
+            </button>
+            <h3 class="text-xl font-bold text-gray-900" id="resultsTitle">
+              {{ getResultsTitle() }}
+            </h3>
+          </div>
           <span class="text-sm text-gray-500 font-medium">
             {{ filteredShows.length }} résultat{{ filteredShows.length > 1 ? 's' : '' }}
           </span>
@@ -148,10 +153,15 @@ import { SpringBootService, Show } from '../../services/spring-boot.service';
             <div class="relative rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
               <!-- Image Container -->
               <div class="aspect-[2/3] bg-gradient-to-br from-gray-100 to-gray-200 relative overflow-hidden">
-                <!-- Badge Score -->
-                <div class="absolute top-2 left-2 px-2.5 py-1 rounded-lg text-white text-[10px] font-black shadow-lg z-10"
-                     [style.background]="getScoreBg(show.composite_score)">
-                  {{ show.composite_score }}
+                <!-- Badges top left -->
+                <div class="absolute top-2 left-2 flex flex-col gap-1 z-10">
+                  <div class="px-2.5 py-1 rounded-lg text-white text-[10px] font-black shadow-lg"
+                       [style.background]="getScoreBg(show.composite_score)">
+                    {{ show.composite_score }}
+                  </div>
+                  <div *ngIf="show.video_type" class="px-2 py-0.5 rounded text-[9px] font-semibold text-gray-700 bg-white/90 backdrop-blur shadow-sm self-start">
+                    {{ getVideoTypeLabel(show.video_type) }}
+                  </div>
                 </div>
 
                 <!-- Poster -->
@@ -316,6 +326,18 @@ export class YukaDashboardComponent implements OnInit {
     });
   }
 
+  loadLatestShows() {
+    this.loading = true;
+    this.springBootService.getLatestShows(20).subscribe({
+      next: (shows) => {
+        this.shows = shows;
+        this.filteredShows = shows;
+        this.loading = false;
+      },
+      error: () => this.loading = false
+    });
+  }
+
   applyAgeFilter(ageId: string) {
     this.activeAgeFilter = ageId;
     this.applyAllFilters();
@@ -389,6 +411,18 @@ export class YukaDashboardComponent implements OnInit {
   getBestScore(): string {
     if (this.shows.length === 0) return '0';
     return Math.max(...this.shows.map(s => s.composite_score)).toString();
+  }
+
+  getVideoTypeLabel(type: string): string {
+    const labels: {[key: string]: string} = {
+      'episode': 'Épisode',
+      'film': 'Film',
+      'movie': 'Film',
+      'extrait': 'Extrait',
+      'trailer': 'Bande-annonce',
+      'full': 'Complet'
+    };
+    return labels[type] || type;
   }
 
   openModal(show: Show) {

@@ -18,15 +18,15 @@ import com.pacingscore.backend.service.TMDBService.ShowInfo;
 
 @Service
 public class TMDBScannerService {
-    
+
     @Value("${tmdb.api.key}")
     private String tmdbApiKey;
-    
+
     @Autowired
     private SupabaseService supabaseService;
-    
+
     private final RestTemplate restTemplate = new RestTemplate();
-    
+
     /**
      * Scanne tous les dessins animés pour enfants sur TMDB
      * et les analyse pour calculer un score de calme
@@ -34,14 +34,14 @@ public class TMDBScannerService {
      */
     public ScanResult scanChildrenAnimations(boolean force) {
         ScanResult result = new ScanResult();
-        
+
         // Pages à scanner
         int maxPages = 5;
-        
+
         for (int page = 1; page <= maxPages; page++) {
             try {
                 System.out.println("Scanning page " + page + "/" + maxPages);
-                
+
                 // Découverte par genre Animation + Family
                 String discoveryUrl = "https://api.themoviedb.org/3/discover/tv"
                     + "?api_key=" + tmdbApiKey
@@ -49,45 +49,45 @@ public class TMDBScannerService {
                     + "&with_genres=16,10751"  // Animation + Family
                     + "&sort_by=popularity.desc"
                     + "&page=" + page;
-                
+
                 String response = restTemplate.getForObject(discoveryUrl, String.class);
                 JSONObject json = new JSONObject(response);
                 JSONArray results = json.getJSONArray("results");
-                
+
                 System.out.println("Page " + page + " returned " + results.length() + " shows");
-                
+
                 for (int i = 0; i < results.length(); i++) {
                     JSONObject showJson = results.getJSONObject(i);
                     int showId = showJson.getInt("id");
                     String title = showJson.getString("name");
                     System.out.println("Processing: " + title + " (ID:" + showId + ")");
-                    
+
                     // Vérifier si déjà analysé (sauf si force=true)
                     if (showAlreadyAnalyzed(showId) && !force) {
                         System.out.println(" => Already exists, skipping");
                         result.alreadyAnalyzed++;
                         continue;
                     }
-                    
+
                     // Récupérer les détails complets
                     ShowInfo show = fetchMediaDetails(showId, "tv", showJson);
-                    
+
                     if (show != null) {
                         // Déterminer l'âge
                         String age = determineAgeRating(show);
                         show.setAgeRating(age);
-                        
+
                         // FILTRE : ignorer les séries 14+ et 18+ (pas pour enfants)
                         if ("14+".equals(age) || "18+".equals(age)) {
                             System.out.println(" => Skipping (age " + age + ")");
                             result.skippedAge++;
                             continue;
                         }
-                        
+
                         // Calculer le score
                         double score = calculatePacingScore(show);
                         show.setPacingScore(score);
-                        
+
                         // 🛡️ VALIDATION CROISÉE : Pacing vs Âge
                         // Si série classée 0+ ou 3+ mais pacing < 60 (trop rapide), remonter à 6+
                         // Un bébé ne doit pas voir un programme rapide, même si les mots-clés/disney disent "0+"
@@ -96,75 +96,171 @@ public class TMDBScannerService {
                             age = "6+";
                             show.setAgeRating(age);
                         }
-                        
+
                         // Sauvegarder l'estimation et créer une tâche d'analyse
                         supabaseService.saveMetadataEstimation(show);
-                        supabaseService.createAnalysisTask(show.getId());
-                        
+                        supabaseService.createAnalysisTask(show.getId(), show.getMediaType());
+
                         result.analyzed++;
                         result.processedShows.add(show);
-                        
+
                         System.out.println("✓ Analyzed & queued: " + show.getTitle() + " (score:" + score + "%, age:" + age + ")");
                     } else {
                         System.err.println("✗ Failed to get details for ID " + showId);
                         result.failed++;
                     }
-                    
+
                     // Pause API
                     Thread.sleep(200);
                 }
-                
+
             } catch (Exception e) {
                 System.err.println("Erreur page " + page + ": " + e.getMessage());
                 e.printStackTrace();
                 result.errors++;
             }
         }
-        
+
         return result;
     }
-    
+
+    /**
+     * Scanne les films d'animation pour enfants sur TMDB
+     * Utilise discover/movie avec genres Animation + Family
+     * @param force si true, réanalyse même les films déjà présents en base
+     */
+    public ScanResult scanMovies(boolean force) {
+        ScanResult result = new ScanResult();
+
+        int maxPages = 5;
+
+        for (int page = 1; page <= maxPages; page++) {
+            try {
+                System.out.println("Scanning movies page " + page + "/" + maxPages);
+
+                String discoveryUrl = "https://api.themoviedb.org/3/discover/movie"
+                    + "?api_key=" + tmdbApiKey
+                    + "&language=fr-FR"
+                    + "&with_genres=16,10751"  // Animation + Family
+                    + "&sort_by=popularity.desc"
+                    + "&page=" + page;
+
+                String response = restTemplate.getForObject(discoveryUrl, String.class);
+                if (response == null) break;
+
+                JSONObject json = new JSONObject(response);
+                JSONArray results = json.getJSONArray("results");
+
+                System.out.println("Movies page " + page + " returned " + results.length() + " films");
+
+                for (int i = 0; i < results.length(); i++) {
+                    JSONObject movieJson = results.getJSONObject(i);
+                    int movieId = movieJson.getInt("id");
+                    String title = movieJson.getString("title");
+                    System.out.println("Processing movie: " + title + " (ID:" + movieId + ")");
+
+                    // Vérifier si déjà analysé (sauf si force=true)
+                    if (showAlreadyAnalyzed(movieId) && !force) {
+                        System.out.println(" => Already exists, skipping");
+                        result.alreadyAnalyzed++;
+                        continue;
+                    }
+
+                    // Récupérer les détails complets avec mediaType="movie"
+                    ShowInfo show = fetchMediaDetails(movieId, "movie", movieJson);
+
+                    if (show != null) {
+                        // Déterminer l'âge (adapté pour les films)
+                        String age = determineAgeRating(show);
+                        show.setAgeRating(age);
+
+                        // FILTRE : ignorer les films 14+ et 18+ (pas pour enfants)
+                        if ("14+".equals(age) || "18+".equals(age)) {
+                            System.out.println(" => Skipping (age " + age + ")");
+                            result.skippedAge++;
+                            continue;
+                        }
+
+                        // Calculer le score
+                        double score = calculatePacingScore(show);
+                        show.setPacingScore(score);
+
+                        // Validation croisée (adaptée éventuellement pour films)
+                        if ((age.equals("0+") || age.equals("3+")) && score < 60) {
+                            System.out.println(" =>[Mollo] Pacing too high for age " + age + " (score:" + score + ") → adjusting to 6+");
+                            age = "6+";
+                            show.setAgeRating(age);
+                        }
+
+                        // Sauvegarder l'estimation et créer une tâche d'analyse
+                        supabaseService.saveMetadataEstimation(show);
+                        supabaseService.createAnalysisTask(show.getId(), show.getMediaType());
+                        
+                        result.analyzed++;
+                        result.processedShows.add(show);
+                        
+                        System.out.println("✓ Analyzed & queued: " + show.getTitle() + " (score:" + score + "%, age:" + age + ")");
+                    } else {
+                        System.err.println("✗ Failed to get details for movie ID " + movieId);
+                        result.failed++;
+                    }
+
+                    Thread.sleep(200);
+                }
+
+                if (results.length() == 0) break;
+
+            } catch (Exception e) {
+                System.err.println("Erreur page movies " + page + ": " + e.getMessage());
+                e.printStackTrace();
+                result.errors++;
+            }
+        }
+
+        return result;
+    }
+
     private boolean showAlreadyAnalyzed(int tmdbId) {
         return supabaseService.showExists(tmdbId);
     }
-    
+
     private ShowInfo fetchMediaDetails(int showId, String mediaType, JSONObject basicInfo) {
         try {
             System.out.println("[DEBUG] Fetching " + mediaType + " details for ID: " + showId);
             String endpoint = "https://api.themoviedb.org/3/" + mediaType + "/" + showId
                 + "?api_key=" + tmdbApiKey
                 + "&language=fr-FR";
-            
+
             String response = restTemplate.getForObject(endpoint, String.class);
             if (response == null) {
                 System.err.println("[ERROR] Null response from TMDB for ID " + showId);
                 return null;
             }
-            
+
             JSONObject json = new JSONObject(response);
             ShowInfo show = new ShowInfo();
             show.setId(showId);
             show.setMediaType(mediaType);
-            
+
             // Title field differs: TV uses "name", Movie uses "title"
             String titleField = mediaType.equals("movie") ? "title" : "name";
             String title = json.optString(titleField, "");
             show.setTitle(title);
-            
+
             // FILTRE : ignorer les titres non-latins (chinois, russe, arabe, etc.)
             if (title != null && !title.matches(".*[a-zA-Z].*")) {
                 System.out.println(" => Skipping non-latin title: " + title);
                 return null;
             }
-            
+
             show.setDescription(json.optString("overview", ""));
             show.setPosterPath(json.optString("poster_path"));
             show.setBackdropPath(json.optString("backdrop_path"));
-            
+
             // Date field: TV uses "first_air_date", Movie uses "release_date"
             String dateField = mediaType.equals("movie") ? "release_date" : "first_air_date";
             show.setFirstAirDate(json.optString(dateField));
-            
+
             // Episode/season count: TV only
             if ("tv".equals(mediaType)) {
                 if (json.has("number_of_episodes") && !json.isNull("number_of_episodes")) {
@@ -174,7 +270,7 @@ public class TMDBScannerService {
                     show.setSeasonCount(json.getInt("number_of_seasons"));
                 }
             }
-            
+
             // Récupérer les genres (stocker les IDs)
             if (json.has("genres")) {
                 JSONArray genres = json.getJSONArray("genres");
@@ -184,7 +280,7 @@ public class TMDBScannerService {
                     show.getGenres().add(String.valueOf(genre.getInt("id")));
                 }
             }
-            
+
             // Networks / Production companies: TV uses "networks", Movie uses "production_companies"
             String networkField = mediaType.equals("movie") ? "production_companies" : "networks";
             if (json.has(networkField)) {
@@ -194,7 +290,7 @@ public class TMDBScannerService {
                     show.setNetwork(networkName);
                 }
             }
-            
+
             // Récupérer les mots-clés
             try {
                 String keywordUrl = "https://api.themoviedb.org/3/" + mediaType + "/" + showId + "/keywords"
@@ -221,7 +317,7 @@ public class TMDBScannerService {
             } catch (Exception e) {
                 // Pas de keywords
             }
-            
+
             // Runtime: TV uses "episode_run_time" array, Movie uses "runtime" (in minutes)
             if ("tv".equals(mediaType)) {
                 if (json.has("episode_run_time") && json.getJSONArray("episode_run_time").length() > 0) {
@@ -232,7 +328,7 @@ public class TMDBScannerService {
                     show.setEpisodeRuntime(json.getInt("runtime"));
                 }
             }
-            
+
             // Certifications: TV only (skip for movie for now)
             if ("tv".equals(mediaType)) {
                 try {
@@ -257,18 +353,18 @@ public class TMDBScannerService {
             } else {
                 show.setCertifications(new HashMap<>());
             }
-            
+
             System.out.println("[DEBUG] Fetched: " + show.getTitle() + " | mediaType=" + mediaType + " | genres=" + show.getGenres() + " | runtime=" + show.getEpisodeRuntime());
-            
+
             return show;
-            
+
         } catch (Exception e) {
             System.err.println("Erreur récupération détails ID " + showId + ": " + e.getMessage());
             e.printStackTrace();
             return null;
         }
     }
-    
+
     /**
      * Détermine l'âge recommandé en utilisant les certifications, les genres IDs et un mapping de titres.
      */
@@ -276,7 +372,7 @@ public class TMDBScannerService {
         String titleLower = show.getTitle() != null ? show.getTitle().toLowerCase() : "";
         String descLower = show.getDescription() != null ? show.getDescription().toLowerCase() : "";
         List<String> genreIds = show.getGenres();
-        
+
         // 0. HARD-BLACKLIST : Franchises d'action → pas en dessous de 6+
         // Priorité absolue : si le titre contient un mot d'action, on ne peut pas être 0+ ou 3+
         String[] actionFranchises = {"avengers", "spiderman", "spider-man", "jurassic", "ninja", "beyblade", "star wars", "justice league", "superhero", "batman", "transformers", "power rangers", "lego", " marvel"};
@@ -289,7 +385,7 @@ public class TMDBScannerService {
                 return "6+";
             }
         }
-        
+
         // 1. Mapping de titres connus (preschool)
         String[] toddlerTitles = {"teletubbies", "petit ours brun", "babar", "dora", "peppa pig", "bluey", "paw patrol", "miffy", "totoro", "caillou", "franklin", "bob le bricoleur", "docteur la peluche", "bubulle guppies", "rainbow ruby"};
         for (String known : toddlerTitles) {
@@ -297,7 +393,7 @@ public class TMDBScannerService {
                 return "0+";
             }
         }
-        
+
         // 2. Priorité aux certifications TMDB
         Map<String, String> certs = show.getCertifications();
         if (certs != null && !certs.isEmpty()) {
@@ -322,14 +418,14 @@ public class TMDBScannerService {
                 if (fr.contains("16+")) return "16+";
             }
         }
-        
+
         // 3. Utilisation des genres IDs (déjà déclaré en tête)
         // 10762 = Kids, 10751 = Family, 16 = Animation
         if (genreIds != null) {
             if (genreIds.contains("10762")) return "3+"; // Kids
             if (genreIds.contains("10751")) return "6+"; // Family
         }
-        
+
         // 3b. Genres Action/Adventure/SciFi → minimum 6+ (sauf si certification très basse)
         if (genreIds != null && (genreIds.contains("28") || genreIds.contains("12") || genreIds.contains("878"))) {
             // Si on a une certification explicite (ex: TV-Y), on l'respecte
@@ -338,18 +434,18 @@ public class TMDBScannerService {
                 return "6+";
             }
         }
-        
+
         // 4. Fallback mots-clés dans titre/description
         String combined = titleLower + " " + show.getDescription().toLowerCase();
         String[] toddlerWords = {"bébé", "baby", "toddler", "tout-petit", "preschool", "maternelle", "nursery", "bébin", "bebeb"};
         for (String w : toddlerWords) {
             if (combined.contains(w)) return "0+";
         }
-        
+
         // 5. Par défaut pour animation longue : 6+
         return "6+";
     }
-    
+
     /**
      * Calcule le score de calme (pacing) basé sur les métadonnées TMDB
      * Score 0-100, plus c'est élevé = plus calme (LENT)
@@ -358,18 +454,18 @@ public class TMDBScannerService {
     private double calculatePacingScore(ShowInfo show) {
         // Nouvelle logique Mollo : partir de 50 (neutre)
         double score = 50;
-        
+
         String title = show.getTitle() != null ? show.getTitle().toLowerCase() : "";
         String desc = show.getDescription() != null ? show.getDescription().toLowerCase() : "";
         List<String> genres = show.getGenres();
         Integer runtime = show.getEpisodeRuntime();
         String ageRating = show.getAgeRating(); // déjà déterminé
-        
+
         // Déterminer is_preschool et is_kids
         boolean isPreschool = "0+".equals(ageRating);
         boolean isKids = isPreschool || "3+".equals(ageRating) || "6+".equals(ageRating)
                          || genres.contains("10762") || genres.contains("10751");
-        
+
         // BONUS de calme
         if (isPreschool) {
             score += 30;
@@ -377,7 +473,7 @@ public class TMDBScannerService {
         if (isKids && runtime != null && runtime < 10) {
             score += 15;
         }
-        
+
         // MALUS de vitesse
         // Slapstick : chercher dans keywords ou description
         boolean hasSlapstick = false;
@@ -399,30 +495,30 @@ public class TMDBScannerService {
         if (hasSlapstick) {
             score -= 40;
         }
-        
+
         // Action (genre ID 28)
         if (genres.contains("28")) {
             score -= 30;
         }
-        
+
         // Comedy (genre ID 35) et pas Kids
         if (genres.contains("35") && !isKids) {
             score -= 20;
         }
-        
+
         // Plafonner à 60 pour Action/Comedy (sans analyse vidéo)
         if (genres.contains("28") || genres.contains("35")) {
             if (score > 60) {
                 score = 60;
             }
         }
-        
+
         // Limiter entre 0 et 100
         score = Math.max(0, Math.min(100, score));
-        
+
         return score;
     }
-    
+
     // Classe interne pour stocker les résultats du scan
     public static class ScanResult {
         public int analyzed = 0;
@@ -431,7 +527,7 @@ public class TMDBScannerService {
         public int errors = 0;
         public int skippedAge = 0; // nouvelles séries skipées car 14+/18+
         public List<ShowInfo> processedShows = new ArrayList<>();
-        
+
         @Override
         public String toString() {
             return "ScanResult{" +

@@ -546,37 +546,10 @@ class VideoAnalyzer:
         
         ASL (Average Shot Length) = Durée moyenne d'un plan en secondes
         
+        Formule Mollo: Score = min(100, ASL × 10)
         Plus l'ASL est élevée, plus le score est bon (plus calme)
         """
-        # Formule logique :
-        # ASL < 4s  → Score très bas (très stimulant)
-        # ASL 4-9s  → Score moyen (stimulant)
-        # ASL 9-14s → Score bon (calme)
-        # ASL > 14s → Score excellent (très calme)
-        
-        if asl < 4:
-            # ASL très court : très mauvais pour les enfants
-            score = 10  # Score très bas
-        elif asl < 6:
-            # ASL court : mauvais
-            score = 25
-        elif asl < 8:
-            # ASL moyen : acceptable
-            score = 45
-        elif asl < 10:
-            # ASL bon : correct
-            score = 65
-        elif asl < 14:
-            # ASL élevé : bon
-            score = 80
-        elif asl < 20:
-            # ASL très élevé : excellent
-            score = 90
-        else:
-            # ASL extrêmement élevé : parfait
-            score = 98
-        
-        return score
+        return min(100.0, asl * 10.0)
     
     def get_evaluation(self, asl: float) -> Dict:
         """Retourne une évaluation basée sur l'ASL"""

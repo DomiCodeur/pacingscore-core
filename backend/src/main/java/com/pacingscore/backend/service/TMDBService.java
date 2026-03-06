@@ -26,7 +26,7 @@ public class TMDBService {
      */
     public List<ShowInfo> searchChildrenCartoons() {
         List<ShowInfo> shows = new ArrayList<>();
-        
+
         // Liste des séries enfants connues à rechercher
         String[] cartoonNames = {
             "baby shark", "cocomelon", "super simple songs", "baby einstein",
@@ -36,7 +36,7 @@ public class TMDBService {
             "astérix et obélix", "tintin", "dinosaur train", "thomas",
             "spidey", "diego", "blue's clues", "mickey mouse"
         };
-        
+
         for (String name : cartoonNames) {
             try {
                 List<ShowInfo> results = searchShow(name, "fr-FR");
@@ -48,8 +48,74 @@ public class TMDBService {
                 System.err.println("Erreur pour " + name + ": " + e.getMessage());
             }
         }
-        
+
         return shows;
+    }
+
+    /**
+     * Recherche de films d'animation pour enfants sur TMDB
+     * Utilise l'endpoint discover/movie avec genres Animation (16) + Family (10751)
+     * Pagination limitée à 5 pages (environ 100 films)
+     */
+    public List<ShowInfo> discoverChildrenMovies() {
+        List<ShowInfo> movies = new ArrayList<>();
+        int maxPages = 5;
+
+        for (int page = 1; page <= maxPages; page++) {
+            try {
+                System.out.println("Scanning movies page " + page + "/" + maxPages);
+
+                String discoveryUrl = "https://api.themoviedb.org/3/discover/movie"
+                    + "?api_key=" + tmdbApiKey
+                    + "&language=fr-FR"
+                    + "&with_genres=16,10751"  // Animation + Family
+                    + "&sort_by=popularity.desc"
+                    + "&page=" + page;
+
+                String response = restTemplate.getForObject(discoveryUrl, String.class);
+                if (response == null) break;
+
+                JSONObject json = new JSONObject(response);
+                JSONArray results = json.getJSONArray("results");
+
+                System.out.println("Movies page " + page + " returned " + results.length() + " films");
+
+                for (int i = 0; i < results.length(); i++) {
+                    JSONObject movieJson = results.getJSONObject(i);
+                    int movieId = movieJson.getInt("id");
+                    String title = movieJson.getString("title");
+
+                    ShowInfo movie = new ShowInfo();
+                    movie.setId(movieId);
+                    movie.setTitle(title);
+                    movie.setDescription(movieJson.optString("overview", ""));
+                    movie.setPosterPath(movieJson.optString("poster_path"));
+                    movie.setBackdropPath(movieJson.optString("backdrop_path"));
+                    movie.setFirstAirDate(movieJson.optString("release_date"));
+                    movie.setMediaType("movie"); // Important
+
+                    // Genres
+                    JSONArray genres = movieJson.optJSONArray("genre_ids");
+                    if (genres != null) {
+                        for (int j = 0; j < genres.length(); j++) {
+                            movie.getGenres().add(String.valueOf(genres.getInt(j)));
+                        }
+                    }
+
+                    movies.add(movie);
+
+                    Thread.sleep(200); // Rate limiting
+                }
+
+                if (results.length() == 0) break;
+
+            } catch (Exception e) {
+                System.err.println("Erreur page movies " + page + ": " + e.getMessage());
+                break;
+            }
+        }
+
+        return movies;
     }
     
     /**
@@ -162,7 +228,7 @@ public class TMDBService {
     public ShowInfo getShowDetailsById(int id) {
         // Essayer d'abord en français
         ShowInfo show = searchShowById(id, "fr-FR");
-        
+
         // Si pas de poster, essayer en anglais
         if (show != null && (show.getPosterPath() == null || show.getPosterPath().isEmpty())) {
             ShowInfo showEn = searchShowById(id, "en-US");
@@ -170,8 +236,75 @@ public class TMDBService {
                 return showEn;
             }
         }
-        
+
         return show;
+    }
+
+    /**
+     * Récupère les détails d'un film par son ID depuis TMDB.
+     * Essaie fr-FR puis en-US si pas de poster.
+     */
+    public ShowInfo getMovieDetailsById(int id) {
+        // Essayer d'abord en français
+        ShowInfo movie = searchMovieById(id, "fr-FR");
+
+        // Si pas de poster, essayer en anglais
+        if (movie != null && (movie.getPosterPath() == null || movie.getPosterPath().isEmpty())) {
+            ShowInfo movieEn = searchMovieById(id, "en-US");
+            if (movieEn != null && movieEn.getPosterPath() != null && !movieEn.getPosterPath().isEmpty()) {
+                return movieEn;
+            }
+        }
+
+        return movie;
+    }
+
+    private ShowInfo searchMovieById(int id, String lang) {
+        String url = "https://api.themoviedb.org/3/movie/" + id
+            + "?api_key=" + tmdbApiKey
+            + "&language=" + lang;
+
+        try {
+            String response = restTemplate.getForObject(url, String.class);
+            if (response == null) return null;
+
+            JSONObject json = new JSONObject(response);
+            ShowInfo movie = new ShowInfo();
+            movie.setId(id);
+            movie.setTitle(json.getString("title"));
+            movie.setDescription(json.optString("overview", ""));
+            movie.setPosterPath(json.optString("poster_path"));
+            movie.setBackdropPath(json.optString("backdrop_path"));
+            movie.setFirstAirDate(json.optString("release_date"));
+            movie.setMediaType("movie");
+
+            // Genres
+            if (json.has("genres")) {
+                JSONArray genres = json.getJSONArray("genres");
+                for (int i = 0; i < genres.length(); i++) {
+                    movie.getGenres().add(String.valueOf(genres.getJSONObject(i).getInt("id")));
+                }
+            }
+
+            // Production companies
+            if (json.has("production_companies")) {
+                JSONArray companies = json.getJSONArray("production_companies");
+                if (companies.length() > 0) {
+                    movie.setNetwork(companies.getJSONObject(0).getString("name").toLowerCase());
+                }
+            }
+
+            // Runtime
+            if (json.has("runtime") && !json.isNull("runtime")) {
+                movie.setEpisodeRuntime(json.getInt("runtime"));
+            }
+
+            return movie;
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
     }
     
     /**
