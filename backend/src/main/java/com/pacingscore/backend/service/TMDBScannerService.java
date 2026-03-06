@@ -70,7 +70,7 @@ public class TMDBScannerService {
                     }
                     
                     // Récupérer les détails complets
-                    ShowInfo show = getShowDetails(showId, showJson);
+                    ShowInfo show = fetchMediaDetails(showId, "tv", showJson);
                     
                     if (show != null) {
                         // Déterminer l'âge
@@ -97,12 +97,14 @@ public class TMDBScannerService {
                             show.setAgeRating(age);
                         }
                         
-                        // Sauvegarder
-                        saveToDatabase(show);
+                        // Sauvegarder l'estimation et créer une tâche d'analyse
+                        supabaseService.saveMetadataEstimation(show);
+                        supabaseService.createAnalysisTask(show.getId());
+                        
                         result.analyzed++;
                         result.processedShows.add(show);
                         
-                        System.out.println("✓ Analyzed & saved: " + show.getTitle() + " (score:" + score + "%, age:" + age + ")");
+                        System.out.println("✓ Analyzed & queued: " + show.getTitle() + " (score:" + score + "%, age:" + age + ")");
                     } else {
                         System.err.println("✗ Failed to get details for ID " + showId);
                         result.failed++;
@@ -126,14 +128,14 @@ public class TMDBScannerService {
         return supabaseService.showExists(tmdbId);
     }
     
-    private ShowInfo getShowDetails(int showId, JSONObject basicInfo) {
+    private ShowInfo fetchMediaDetails(int showId, String mediaType, JSONObject basicInfo) {
         try {
-            System.out.println("[DEBUG] Fetching TMDB details for ID: " + showId);
-            String url = "https://api.themoviedb.org/3/tv/" + showId
+            System.out.println("[DEBUG] Fetching " + mediaType + " details for ID: " + showId);
+            String endpoint = "https://api.themoviedb.org/3/" + mediaType + "/" + showId
                 + "?api_key=" + tmdbApiKey
                 + "&language=fr-FR";
             
-            String response = restTemplate.getForObject(url, String.class);
+            String response = restTemplate.getForObject(endpoint, String.class);
             if (response == null) {
                 System.err.println("[ERROR] Null response from TMDB for ID " + showId);
                 return null;
@@ -142,7 +144,11 @@ public class TMDBScannerService {
             JSONObject json = new JSONObject(response);
             ShowInfo show = new ShowInfo();
             show.setId(showId);
-            String title = json.getString("name");
+            show.setMediaType(mediaType);
+            
+            // Title field differs: TV uses "name", Movie uses "title"
+            String titleField = mediaType.equals("movie") ? "title" : "name";
+            String title = json.optString(titleField, "");
             show.setTitle(title);
             
             // FILTRE : ignorer les titres non-latins (chinois, russe, arabe, etc.)
@@ -154,14 +160,19 @@ public class TMDBScannerService {
             show.setDescription(json.optString("overview", ""));
             show.setPosterPath(json.optString("poster_path"));
             show.setBackdropPath(json.optString("backdrop_path"));
-            show.setFirstAirDate(json.optString("first_air_date"));
             
-            // Récupérer les épisodes pour analyser la durée
-            if (json.has("number_of_episodes") && !json.isNull("number_of_episodes")) {
-                show.setEpisodeCount(json.getInt("number_of_episodes"));
-            }
-            if (json.has("number_of_seasons") && !json.isNull("number_of_seasons")) {
-                show.setSeasonCount(json.getInt("number_of_seasons"));
+            // Date field: TV uses "first_air_date", Movie uses "release_date"
+            String dateField = mediaType.equals("movie") ? "release_date" : "first_air_date";
+            show.setFirstAirDate(json.optString(dateField));
+            
+            // Episode/season count: TV only
+            if ("tv".equals(mediaType)) {
+                if (json.has("number_of_episodes") && !json.isNull("number_of_episodes")) {
+                    show.setEpisodeCount(json.getInt("number_of_episodes"));
+                }
+                if (json.has("number_of_seasons") && !json.isNull("number_of_seasons")) {
+                    show.setSeasonCount(json.getInt("number_of_seasons"));
+                }
             }
             
             // Récupérer les genres (stocker les IDs)
@@ -174,9 +185,10 @@ public class TMDBScannerService {
                 }
             }
             
-            // Récupérer les réseaux
-            if (json.has("networks")) {
-                JSONArray networks = json.getJSONArray("networks");
+            // Networks / Production companies: TV uses "networks", Movie uses "production_companies"
+            String networkField = mediaType.equals("movie") ? "production_companies" : "networks";
+            if (json.has(networkField)) {
+                JSONArray networks = json.getJSONArray(networkField);
                 if (networks.length() > 0) {
                     String networkName = networks.getJSONObject(0).getString("name").toLowerCase();
                     show.setNetwork(networkName);
@@ -185,48 +197,68 @@ public class TMDBScannerService {
             
             // Récupérer les mots-clés
             try {
-                String keywordUrl = "https://api.themoviedb.org/3/tv/" + showId + "/keywords"
+                String keywordUrl = "https://api.themoviedb.org/3/" + mediaType + "/" + showId + "/keywords"
                     + "?api_key=" + tmdbApiKey;
                 String kwResponse = restTemplate.getForObject(keywordUrl, String.class);
                 if (kwResponse != null) {
                     JSONObject kwJson = new JSONObject(kwResponse);
-                    JSONArray keywords = kwJson.getJSONArray("keywords");
-                    for (int i = 0; i < keywords.length(); i++) {
-                        String keyword = keywords.getJSONObject(i).getString("name").toLowerCase();
-                        show.getKeywords().add(keyword);
+                    JSONArray keywords;
+                    if (kwJson.has("keywords")) {
+                        keywords = kwJson.getJSONArray("keywords");
+                    } else if (kwJson.has("results")) {
+                        keywords = kwJson.getJSONArray("results");
+                    } else {
+                        keywords = null;
+                    }
+                    if (keywords != null) {
+                        for (int i = 0; i < keywords.length(); i++) {
+                            JSONObject kw = keywords.getJSONObject(i);
+                            String keyword = kw.getString("name").toLowerCase();
+                            show.getKeywords().add(keyword);
+                        }
                     }
                 }
             } catch (Exception e) {
                 // Pas de keywords
             }
             
-            // Récupérer la durée moyenne des épisodes
-            if (json.has("episode_run_time") && json.getJSONArray("episode_run_time").length() > 0) {
-                show.setEpisodeRuntime(json.getJSONArray("episode_run_time").getInt(0));
-            }
-            
-            // Récupérer les certifications
-            try {
-                String certUrl = "https://api.themoviedb.org/3/tv/" + showId + "/content_ratings"
-                    + "?api_key=" + tmdbApiKey;
-                String certResponse = restTemplate.getForObject(certUrl, String.class);
-                if (certResponse != null) {
-                    JSONObject certJson = new JSONObject(certResponse);
-                    JSONArray results = certJson.getJSONArray("results");
-                    Map<String, String> certMap = new HashMap<>();
-                    for (int i = 0; i < results.length(); i++) {
-                        JSONObject c = results.getJSONObject(i);
-                        String iso = c.getString("iso_3166_1");
-                        String rating = c.getString("rating");
-                        certMap.put(iso, rating);
-                    }
-                    show.setCertifications(certMap);
+            // Runtime: TV uses "episode_run_time" array, Movie uses "runtime" (in minutes)
+            if ("tv".equals(mediaType)) {
+                if (json.has("episode_run_time") && json.getJSONArray("episode_run_time").length() > 0) {
+                    show.setEpisodeRuntime(json.getJSONArray("episode_run_time").getInt(0));
                 }
-            } catch (Exception e) {
-                // Pas de certifications
+            } else {
+                if (json.has("runtime") && !json.isNull("runtime")) {
+                    show.setEpisodeRuntime(json.getInt("runtime"));
+                }
             }
             
-            System.out.println("[DEBUG] Fetched: " + show.getTitle() + " | genres=" + show.getGenres() + " | runtime=" + show.getEpisodeRuntime());
+            // Certifications: TV only (skip for movie for now)
+            if ("tv".equals(mediaType)) {
+                try {
+                    String certUrl = "https://api.themoviedb.org/3/tv/" + showId + "/content_ratings"
+                        + "?api_key=" + tmdbApiKey;
+                    String certResponse = restTemplate.getForObject(certUrl, String.class);
+                    if (certResponse != null) {
+                        JSONObject certJson = new JSONObject(certResponse);
+                        JSONArray results = certJson.getJSONArray("results");
+                        Map<String, String> certMap = new HashMap<>();
+                        for (int i = 0; i < results.length(); i++) {
+                            JSONObject c = results.getJSONObject(i);
+                            String iso = c.getString("iso_3166_1");
+                            String rating = c.getString("rating");
+                            certMap.put(iso, rating);
+                        }
+                        show.setCertifications(certMap);
+                    }
+                } catch (Exception e) {
+                    // Pas de certifications
+                }
+            } else {
+                show.setCertifications(new HashMap<>());
+            }
+            
+            System.out.println("[DEBUG] Fetched: " + show.getTitle() + " | mediaType=" + mediaType + " | genres=" + show.getGenres() + " | runtime=" + show.getEpisodeRuntime());
             
             return show;
             
@@ -389,10 +421,6 @@ public class TMDBScannerService {
         score = Math.max(0, Math.min(100, score));
         
         return score;
-    }
-    
-    private void saveToDatabase(ShowInfo show) {
-        supabaseService.saveShowAnalysis(show);
     }
     
     // Classe interne pour stocker les résultats du scan

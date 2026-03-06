@@ -91,7 +91,9 @@ public class AnalysisController {
                 // Vérifier si la série existe déjà
                 if (!supabaseService.showExists(show.getId())) {
                     try {
-                        supabaseService.saveShowAnalysis(show);
+                        // Nouvelle architecture : sauver l'estimation + créer une tâche d'analyse
+                        supabaseService.saveMetadataEstimation(show);
+                        supabaseService.createAnalysisTask(show.getId());
                         saved++;
                         Thread.sleep(500); // Pause pour respecter les limites d'API
                     } catch (Exception e) {
