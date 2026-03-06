@@ -9,18 +9,21 @@ export interface Show {
   poster_path: string;
   backdrop_path: string;
   composite_score: number;
-  average_shot_length: number;
-  num_scenes: number;
+  average_shot_length: number | null;
+  num_scenes: number | null;
   evaluation_label: string;
   evaluation_description: string;
   evaluation_color: 'green' | 'lime' | 'yellow' | 'red';
   age_recommendation: string;
   description: string;
-  analysis_details: {
-    cuts_per_minute: number;
-    flashs_detected: number;
-    motion_intensity: number;
-  };
+  analysis_details: any | null;
+  video_path: string;
+  is_verified: boolean;
+  tmdb_id: string;
+  media_type?: string; // 'movie' ou 'tv'
+  video_duration?: number | null;
+  cuts_per_minute?: number | null;
+  motion_intensity?: number | null;
 }
 
 @Injectable({

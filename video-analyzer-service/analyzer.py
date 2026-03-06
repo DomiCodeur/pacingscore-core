@@ -23,6 +23,9 @@ except ImportError as e:
     print(f"Erreur d'import: {e}. Installation nécessaire...")
     sys.exit(1)
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 class VideoAnalyzer:
     """Analyseur vidéo pour détecter les cuts de scène et l'intensité du mouvement"""
@@ -105,7 +108,7 @@ class VideoAnalyzer:
             print(f"⚠ Erreur dans le calcul du mouvement: {e}")
             return 0.0
     
-    def _detect_black_frames_and_flashes(self, video_path: str) -> Dict[str, Any]:
+    def _detect_black_frames_and_flashes(self, video_path: str, start_time: float = 0, end_time: float = None) -> Dict[str, Any]:
         """
         Détecte les passages noirs et les flashs (changement brutal de luminosité)
         
@@ -121,6 +124,11 @@ class VideoAnalyzer:
             fps = cap.get(cv2.CAP_PROP_FPS)
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             
+            # Calculer les frames de début et fin si segment spécifié
+            start_frame = int(start_time * fps) if start_time > 0 else 0
+            end_frame = int(end_time * fps) if end_time else total_frames
+            end_frame = min(end_frame, total_frames)
+            
             black_frame_count = 0
             flash_transitions = []
             prev_luminosity = None
@@ -128,8 +136,12 @@ class VideoAnalyzer:
             frame_count = 0
             while True:
                 ret, frame = cap.read()
-                if not ret:
+                if not ret or frame_count >= end_frame:
                     break
+                
+                if frame_count < start_frame:
+                    frame_count += 1
+                    continue
                 
                 # Convertir en niveaux de gris
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -172,7 +184,7 @@ class VideoAnalyzer:
             print(f"⚠ Erreur dans la détection des flashs: {e}")
             return {"black_frames": 0, "flashes": 0, "intensity": 0.0}
         
-    def analyze_video(self, video_path: str, analyze_motion: bool = True, analyze_flashes: bool = True) -> Dict:
+    def analyze_video(self, video_path: str, analyze_motion: bool = True, analyze_flashes: bool = True, start_time: float = 0, end_time: float = None) -> Dict:
         """
         Analyse une vidéo pour détecter les cuts, mouvement et flashs
         
@@ -180,6 +192,8 @@ class VideoAnalyzer:
             video_path: Chemin vers la vidéo
             analyze_motion: Active l'analyse du mouvement
             analyze_flashes: Active la détection des flashs
+            start_time: Temps de début d'analyse en secondes (optionnel)
+            end_time: Temps de fin d'analyse en secondes (optionnel, None = jusqu'à la fin)
             
         Retourne un dictionnaire complet avec toutes les métriques
         """
@@ -192,13 +206,16 @@ class VideoAnalyzer:
                 threshold=self.threshold,
                 min_scene_len=self.min_scene_len
             )
-            scene_list = detect(video_path, detector)
+            if start_time or end_time:
+                scene_list = detect(video_path, detector, start_time=start_time, end_time=end_time)
+            else:
+                scene_list = detect(video_path, detector)
             
             # 2. Détection des flashs et frames noirs
             flash_analysis = {}
             if analyze_flashes:
                 print("   [2/6] Détection des flashs et frames noirs...")
-                flash_analysis = self._detect_black_frames_and_flashes(video_path)
+                flash_analysis = self._detect_black_frames_and_flashes(video_path, start_time, end_time)
             
             # 3. Calcul de la durée totale
             cap = cv2.VideoCapture(video_path)
@@ -207,9 +224,16 @@ class VideoAnalyzer:
             total_duration = frame_count / fps if fps > 0 else 0
             cap.release()
             
+            # Si on a un segment spécifié, calculer sa durée
+            if start_time or end_time:
+                segment_end = min(end_time, total_duration) if end_time else total_duration
+                analyzed_duration = segment_end - start_time
+            else:
+                analyzed_duration = total_duration
+            
             # 4. Calcul des métriques de base
             num_scenes = len(scene_list)
-            asl = total_duration / num_scenes if num_scenes > 0 else total_duration
+            asl = analyzed_duration / num_scenes if num_scenes > 0 else analyzed_duration
             print(f"   [3/6] {num_scenes} scènes détectées, ASL: {asl:.2f}s")
             
             # 5. Calcul du mouvement (optionnel, peut être long)
@@ -219,8 +243,8 @@ class VideoAnalyzer:
                 # Analyser le 1er quart de la vidéo pour le mouvement
                 motion_intensity = self._calculate_motion_intensity(
                     video_path, 
-                    start_time=0, 
-                    end_time=min(30, total_duration)  # Max 30s pour le mouvement
+                    start_time=start_time, 
+                    end_time=start_time + min(30, analyzed_duration)  # 30s max dans le segment
                 )
                 print(f"   [4/6] Intensité mouvement: {motion_intensity}/100")
             else:
@@ -257,7 +281,7 @@ class VideoAnalyzer:
             
             result = {
                 "success": True,
-                "video_duration": round(total_duration, 2),
+                "video_duration": round(analyzed_duration, 2),  # durée analysée
                 "num_scenes": num_scenes,
                 "average_shot_length": round(asl, 2),
                 "pacing_score": round(base_pacing_score, 2),  # Score historique
@@ -599,14 +623,15 @@ class YouTubeDownloader:
     """Téléchargeur de vidéos YouTube via yt-dlp (bibliothèque Python)"""
     
     @staticmethod
-    def download_video_snippet(video_url: str, output_dir: str = None, max_duration: int = 120) -> str:
+    def download_video_snippet(video_url: str, output_dir: str = None, max_duration: int = 120, start_time: float = None) -> str:
         """
-        Télécharge une partie d'une vidéo YouTube en utilisant yt-dlp via subprocess
+        Télécharge une partie d'une vidéo via yt-dlp.
         
         Args:
             video_url: URL de la vidéo
-            output_dir: Dossier de sortie (par défaut: temp)
-            max_duration: Durée maximale à télécharger en secondes (par défaut: 2 min)
+            output_dir: Dossier de sortie
+            max_duration: Durée maximale à télécharger (secondes)
+            start_time: Temps de début en secondes (si None, commence au début)
             
         Retourne le chemin du fichier téléchargé
         """
@@ -616,41 +641,37 @@ class YouTubeDownloader:
         if output_dir is None:
             output_dir = tempfile.gettempdir()
         
-        # Créer le dossier
         os.makedirs(output_dir, exist_ok=True)
         
-        # Générer un nom de fichier unique basé sur l'URL
         video_hash = hashlib.md5(video_url.encode()).hexdigest()[:8]
         output_path = os.path.join(output_dir, f"video_{video_hash}.mp4")
         
-        # Construire la commande yt-dlp
         python_exe = sys.executable
         cmd = [
             python_exe, '-m', 'yt_dlp',
             video_url,
             '--format', 'bestvideo[height<=480][ext=mp4]/best[height<=480]',
             '--output', output_path,
-            '--impersonate', 'Chrome-99',
             '--quiet',
             '--no-warnings',
+            '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            '--external-downloader', 'ffmpeg',
         ]
         
-        # Pour télécharger un extrait, on pourrait utiliser --download-sections, mais on va télécharger la vidéo complète
-        # L'analyseur tronquera la vidéo si nécessaire
+        # Arguments pour limiter la durée et éventuellement starting point
+        dl_args = []
+        if start_time is not None:
+            dl_args.append(f'-ss {start_time}')
+        dl_args.append(f'-t {max_duration}')
+        cmd.extend(['--external-downloader-args', ' '.join(dl_args)])
         
         try:
-            print(f"[TELECHARGEMENT] {video_url}")
-            print(f"[COMMANDE] {' '.join(cmd)}")
-            
-            # Exécuter la commande
+            logger.info(f"[TELECHARGEMENT] {video_url} (start={start_time}s, duration={max_duration}s)")
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
             
-            if result.returncode == 0:
-                if os.path.exists(output_path):
-                    print(f"[SUCCES] Téléchargement réussi: {output_path}")
-                    return output_path
-                else:
-                    raise Exception("Le fichier téléchargé n'a pas été créé")
+            if result.returncode == 0 and os.path.exists(output_path):
+                logger.info(f"[SUCCES] Téléchargement: {output_path}")
+                return output_path
             else:
                 error_msg = result.stderr[:500] if result.stderr else "Unknown error"
                 raise Exception(f"Erreur yt-dlp: {error_msg}")
@@ -658,13 +679,12 @@ class YouTubeDownloader:
         except subprocess.TimeoutExpired:
             raise Exception("Timeout: téléchargement trop long")
         except Exception as e:
-            # Nettoyer le fichier partiel s'il existe
             if os.path.exists(output_path):
                 try:
                     os.remove(output_path)
                 except:
                     pass
-            raise Exception(f"Erreur yt-dlp: {str(e)}")
+            raise e
     
     @staticmethod
     def _progress_hook(d):

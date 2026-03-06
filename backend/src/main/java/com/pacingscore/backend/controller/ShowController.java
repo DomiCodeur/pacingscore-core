@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.ArrayList;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/shows")
@@ -62,7 +63,7 @@ public class ShowController {
     }
     
     @Operation(summary = "Récupère la liste des vidéos analysées",
-               description = "Retourne une liste paginée de vidéos avec leurs scores de rythme, images et métadonnées. Tri par score décroissant.",
+               description = "Retourne une liste paginée de vidéos avec leurs scores de rythme (réel si disponible, sinon estimé), images et métadonnées. Tri par score décroissant.",
                responses = {
                    @ApiResponse(responseCode = "200", description = "Liste récupérée avec succès",
                        content = @Content(mediaType = "application/json")),
@@ -75,138 +76,216 @@ public class ShowController {
             @Parameter(in = ParameterIn.QUERY, description = "Score minimum de rythme (0-100)", schema = @Schema(type = "number", defaultValue = "0"))
             @RequestParam(defaultValue = "0") double minScore,
             @Parameter(in = ParameterIn.QUERY, description = "Filtrer par titre (recherche partielle)", schema = @Schema(type = "string"))
-            @RequestParam(required = false) String search) {
-        
-        HttpHeaders headers = new HttpHeaders();
-        headers.set("apikey", supabaseConfig.getKey());
-        headers.set("Authorization", "Bearer " + supabaseConfig.getKey());
-        
-        StringBuilder query = new StringBuilder("?order=pacing_score.desc&limit=200");
-        if (search != null && !search.isEmpty()) {
-            query.append("&title=ilike.%" + search + "%");
-        }
-        if (!age.equals("0+")) {
-            query.append("&age_rating=eq.").append(age);
-        }
-        if (minScore > 0) {
-            query.append("&pacing_score=gte.").append(minScore);
-        }
-        
-        String endpoint = supabaseConfig.getUrl() + "/rest/v1/video_analyses" + query;
+            @RequestParam(required = false) String search,
+            @Parameter(in = ParameterIn.QUERY, description = "Filtrer par type de média (movie ou tv)", schema = @Schema(type = "string"))
+            @RequestParam(required = false) String type) {
         
         try {
+            // 1. Récupérer les estimations depuis metadata_estimations
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("apikey", supabaseConfig.getKey());
+            headers.set("Authorization", "Bearer " + supabaseConfig.getKey());
+            
+            StringBuilder query = new StringBuilder("?order=estimated_score.desc&limit=200");
+            if (search != null && !search.isEmpty()) {
+                query.append("&title=ilike.%").append(search).append("%");
+            }
+            if (!age.equals("0+")) {
+                query.append("&age_rating_guess=eq.").append(age);
+            }
+            if (minScore > 0) {
+                query.append("&estimated_score=gte.").append(minScore);
+            }
+            if (type != null && !type.isEmpty()) {
+                query.append("&media_type=eq.").append(type);
+            }
+            
+            String endpoint = supabaseConfig.getUrl() + "/rest/v1/metadata_estimations" + query;
+            
             HttpEntity<String> entity = new HttpEntity<>(headers);
             ResponseEntity<List> response = restTemplate.exchange(endpoint, HttpMethod.GET, entity, List.class);
             
-            List<Map<String, Object>> shows = (List<Map<String, Object>>) response.getBody();
-            List<Map<String, Object>> result = new ArrayList<>();
+            List<Map<String, Object>> estimations = (List<Map<String, Object>>) response.getBody();
+            if (estimations == null) estimations = new ArrayList<>();
             
-            if (shows != null) {
-                for (Map<String, Object> show : shows) {
-                    Map<String, Object> mappedShow = new HashMap<>(show);
-                    
-                    // 1. FORCER LE TITRE
-                    String title = (String) show.get("title");
-                    Map<String, Object> meta = parseMetadata(show.get("metadata"));
-                    if (meta != null && meta.get("fr_title") != null) {
-                        title = (String) meta.get("fr_title");
-                    } else if (title == null || title.isEmpty()) {
-                        title = (String) show.get("video_path");
+            // 2. Si on a des estimations, récupérer les scores réels correspondants en batch
+            List<String> tmdbIds = estimations.stream()
+                .map(est -> String.valueOf(est.get("tmdb_id")))
+                .collect(Collectors.toList());
+            
+            Map<String, Map<String, Object>> realScoresMap = new HashMap<>();
+            if (!tmdbIds.isEmpty()) {
+                // Construire la clause IN (malheureusement PostgREST n'accepte pas plus de 5 IDs dans un in? On peut faire une requête par lot de 5, ou alors une requête globale avec?tmdb_id=in.(id1,id2,...)
+                // Simplifions: on fait une requête qui récupère tous les mollo_scores dont le tmdb_id est dans la liste
+                String idsParam = String.join(",", tmdbIds);
+                String scoresEndpoint = supabaseConfig.getUrl() + "/rest/v1/mollo_scores?tmdb_id=in.(" + idsParam + ")";
+                ResponseEntity<List> scoresResponse = restTemplate.exchange(scoresEndpoint, HttpMethod.GET, entity, List.class);
+                List<Map<String, Object>> realScores = (List<Map<String, Object>>) scoresResponse.getBody();
+                if (realScores != null) {
+                    for (Map<String, Object> scoreEntry : realScores) {
+                        String id = String.valueOf(scoreEntry.get("tmdb_id"));
+                        realScoresMap.put(id, scoreEntry);
                     }
-                    mappedShow.put("title", title);
-                    
-                    // 2. Age rating : prioriser age_rating si display_age vaut "0+" (défaut)
-                    String displayAge = meta != null ? (String) meta.get("display_age") : null;
-                    Object ageRatingObj = show.get("age_rating");
-                    String ageRating = "0+";
-                    if (ageRatingObj instanceof String) {
-                        ageRating = (String) ageRatingObj;
-                    } else if (ageRatingObj != null) {
-                        ageRating = ageRatingObj.toString();
+                }
+            }
+            
+            // 3. Construire la réponse finale (format compatible avec l'interface Show frontend)
+            List<Map<String, Object>> result = new ArrayList<>();
+            for (Map<String, Object> est : estimations) {
+                Map<String, Object> mappedShow = new HashMap<>();
+                String tmdbIdStr = String.valueOf(est.get("tmdb_id"));
+                
+                // Score: priorité au score réel s'il existe
+                Map<String, Object> realScoreEntry = realScoresMap.get(tmdbIdStr);
+                double compositeScore; // pacing_score
+                boolean isVerified = false;
+                Double averageShotLength = null; // peut être null
+                Integer numScenes = null;
+                Map<String, Object> analysisDetails = null;
+                
+                if (realScoreEntry != null && realScoreEntry.get("real_score") != null) {
+                    Object rs = realScoreEntry.get("real_score");
+                    if (rs instanceof Number) {
+                        compositeScore = ((Number) rs).doubleValue();
+                        isVerified = true;
+                    } else {
+                        compositeScore = 0;
                     }
-                    String finalAge = (displayAge != null && !displayAge.equals("0+")) ? displayAge : ageRating;
-                    mappedShow.put("age_recommendation", finalAge);
-
-                    // 3. Récupération image
-                    String posterPath = null;
                     
-                    // 3a. Vérifier tmdb_data->poster_path
-                    if (show.containsKey("tmdb_data") && show.get("tmdb_data") instanceof Map) {
-                        posterPath = (String) ((Map) show.get("tmdb_data")).get("poster_path");
-                    }
-                    
-                    // 3b. Chercher par TMDB ID si pas d'image
-                    if ((posterPath == null || posterPath.isEmpty()) && meta != null) {
-                        Object tmdbIdObj = meta.get("tmdb_id");
-                        if (tmdbIdObj != null) {
-                            try {
-                                int tmdbId = Integer.parseInt(tmdbIdObj.toString());
-                                TMDBService.ShowInfo tmdbInfo = tmdbService.getShowDetailsById(tmdbId);
-                                if (tmdbInfo != null && tmdbInfo.getPosterPath() != null && !tmdbInfo.getPosterPath().isEmpty()) {
-                                    posterPath = tmdbInfo.getPosterPath();
-                                    // Enrichir description si manquante
-                                    if (mappedShow.get("description") == null && tmdbInfo.getDescription() != null) {
-                                        mappedShow.put("description", tmdbInfo.getDescription());
-                                    }
-                                }
-                            } catch (Exception e) { /* Silencieux */ }
+                    // Extraire les données de scene_details si présent
+                    Object sceneDetailsObj = realScoreEntry.get("scene_details");
+                    if (sceneDetailsObj instanceof Map) {
+                        Map<String, Object> sceneDetails = (Map<String, Object>) sceneDetailsObj;
+                        Object cpm = sceneDetails.get("cuts_per_minute");
+                        if (cpm instanceof Number) {
+                            averageShotLength = 60.0 / ((Number) cpm).doubleValue(); // estimation approximative
                         }
+                        Object totalCuts = sceneDetails.get("total_cuts");
+                        if (totalCuts instanceof Number) {
+                            numScenes = ((Number) totalCuts).intValue();
+                        }
+                        // On peut aussi passer sceneDetails comme analysis_details
+                        analysisDetails = sceneDetails;
                     }
                     
-                    // 3c. Fallback par titre (fr + en)
-                    if ((posterPath == null || posterPath.isEmpty()) && title != null) {
-                        try {
-                            TMDBService.ShowInfo tmdbInfo = tmdbService.findSingleShowWithFallback(title);
-                            if (tmdbInfo != null && tmdbInfo.getPosterPath() != null && !tmdbInfo.getPosterPath().isEmpty()) {
-                                posterPath = tmdbInfo.getPosterPath();
-                                if (mappedShow.get("description") == null && tmdbInfo.getDescription() != null) {
-                                    mappedShow.put("description", tmdbInfo.getDescription());
-                                }
-                            }
-                        } catch (Exception e) { /* Silencieux */ }
+                    // vidéo URL
+                    if (realScoreEntry.get("video_url") != null) {
+                        mappedShow.put("video_path", realScoreEntry.get("video_url"));
+                    } else {
+                        mappedShow.put("video_path", "Analyse vidéo disponible");
                     }
-
-                    // 3d. Appliquer le chemin (avec URL TMDB si nécessaire)
-                    if (posterPath != null && !posterPath.isEmpty()) {
+                } else {
+                    // Estimation TMDB
+                    Object es = est.get("estimated_score");
+                    if (es instanceof Number) {
+                        compositeScore = ((Number) es).doubleValue();
+                    } else {
+                        compositeScore = 0;
+                    }
+                    mappedShow.put("video_path", "Estimation TMDB - Pas encore analysée");
+                }
+                
+                // id: on utilise tmdb_id convertible en number (parser)
+                try {
+                    mappedShow.put("id", Integer.parseInt(tmdbIdStr));
+                } catch (NumberFormatException e) {
+                    mappedShow.put("id", 0);
+                }
+                
+                // composite_score
+                mappedShow.put("composite_score", compositeScore);
+                
+                // average_shot_length (null si pas d'analyse)
+                mappedShow.put("average_shot_length", averageShotLength);
+                
+                // num_scenes (null si pas d'analyse)
+                mappedShow.put("num_scenes", numScenes);
+                
+                // evaluation_label (calculé)
+                String evalLabel;
+                if (compositeScore >= 60) evalLabel = "LENT";
+                else if (compositeScore >= 45) evalLabel = "BON";
+                else if (compositeScore >= 25) evalLabel = "MODÉRÉ";
+                else evalLabel = "RAPIDE";
+                mappedShow.put("evaluation_label", evalLabel);
+                
+                // evaluation_description (texte libre)
+                mappedShow.put("evaluation_description", "");
+                
+                // evaluation_color (déduit du score)
+                String evalColor;
+                if (compositeScore >= 60) evalColor = "green";
+                else if (compositeScore >= 45) evalColor = "lime";
+                else if (compositeScore >= 25) evalColor = "yellow";
+                else evalColor = "red";
+                mappedShow.put("evaluation_color", evalColor);
+                
+                // age_recommendation (provenance de age_rating_guess)
+                String ageRating = (String) est.get("age_rating_guess");
+                mappedShow.put("age_recommendation", ageRating != null ? ageRating : "0+");
+                
+                // media_type (movie ou tv)
+                Object mediaType = est.get("media_type");
+                if (mediaType != null) {
+                    mappedShow.put("media_type", mediaType.toString());
+                }
+                
+                // Titre
+                String title = (String) est.get("title");
+                if (title == null || title.isEmpty()) {
+                    Map<String, Object> meta = parseMetadata(est.get("metadata"));
+                    title = meta != null ? (String) meta.get("fr_title") : null;
+                }
+                mappedShow.put("title", title);
+                
+                // Description depuis metadata
+                Map<String, Object> meta = parseMetadata(est.get("metadata"));
+                if (meta != null) {
+                    Object desc = meta.get("description");
+                    if (desc != null) mappedShow.put("description", desc);
+                    Object poster = meta.get("poster_path");
+                    if (poster != null) {
+                        String posterPath = poster.toString();
                         if (posterPath.startsWith("http")) {
                             mappedShow.put("poster_path", posterPath);
                         } else {
                             mappedShow.put("poster_path", "https://image.tmdb.org/t/p/w500" + (posterPath.startsWith("/") ? "" : "/") + posterPath);
                         }
-                    } else {
-                        // FALLBACK ULTIME : image Unsplash (已验证加载)
-                        mappedShow.put("poster_path", "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&q=80");
                     }
-                    
-                    // 4. Label d'évaluation (avec protection NaN)
-                    Object pacingScoreObj = show.get("pacing_score");
-                    double compositeScore = 0;
-                    if (pacingScoreObj instanceof Number) {
-                        double val = ((Number) pacingScoreObj).doubleValue();
-                        compositeScore = Double.isNaN(val) ? 0 : val;
-                    } else if (pacingScoreObj instanceof String) {
-                        try {
-                            String str = ((String) pacingScoreObj).trim();
-                            if (!str.isEmpty()) {
-                                double val = Double.parseDouble(str);
-                                compositeScore = Double.isNaN(val) ? 0 : val;
-                            }
-                        } catch (NumberFormatException e) {
-                            compositeScore = 0;
-                        }
-                    }
-                    mappedShow.put("composite_score", compositeScore);
-                    
-                    if (compositeScore >= 60) mappedShow.put("evaluation_label", "LENT");
-                    else if (compositeScore >= 45) mappedShow.put("evaluation_label", "BON");
-                    else if (compositeScore >= 25) mappedShow.put("evaluation_label", "MODÉRÉ");
-                    else mappedShow.put("evaluation_label", "RAPIDE");
-                    
-                    result.add(mappedShow);
                 }
+                
+                // Fallback poster si manquant
+                if (!mappedShow.containsKey("poster_path") || mappedShow.get("poster_path") == null) {
+                    mappedShow.put("poster_path", "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&q=80");
+                }
+                
+                // analysis_details (null si pas d'analyse)
+                mappedShow.put("analysis_details", analysisDetails);
+                
+                // Nouvelles données vidéo (si disponibles)
+                if (realScoreEntry != null) {
+                    Object vd = realScoreEntry.get("video_duration");
+                    if (vd instanceof Number) {
+                        mappedShow.put("video_duration", ((Number) vd).doubleValue());
+                    }
+                    Object cpm = realScoreEntry.get("cuts_per_minute");
+                    if (cpm instanceof Number) {
+                        mappedShow.put("cuts_per_minute", ((Number) cpm).doubleValue());
+                    }
+                    Object mi = realScoreEntry.get("motion_intensity");
+                    if (mi instanceof Number) {
+                        mappedShow.put("motion_intensity", ((Number) mi).doubleValue());
+                    }
+                }
+                
+                // Ajouter le tmdb_id pour le front si besoin
+                mappedShow.put("tmdb_id", tmdbIdStr);
+                
+                result.add(mappedShow);
             }
             
             return ResponseEntity.ok(result);
+            
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();

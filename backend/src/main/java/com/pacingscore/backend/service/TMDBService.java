@@ -193,7 +193,8 @@ public class TMDBService {
         private List<String> keywords = new ArrayList<>();
         private Map<String, String> certifications = new HashMap<>();
         private Integer episodeRuntime; // en minutes
-        
+        private String mediaType; // "movie" ou "tv"
+
         // Getters and setters
         public int getId() { return id; }
         public void setId(int id) { this.id = id; }
@@ -225,5 +226,7 @@ public class TMDBService {
         public void setCertifications(Map<String, String> certifications) { this.certifications = certifications; }
         public Integer getEpisodeRuntime() { return episodeRuntime; }
         public void setEpisodeRuntime(Integer episodeRuntime) { this.episodeRuntime = episodeRuntime; }
+        public String getMediaType() { return mediaType; }
+        public void setMediaType(String mediaType) { this.mediaType = mediaType; }
     }
 }

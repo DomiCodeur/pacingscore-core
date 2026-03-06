@@ -113,6 +113,19 @@ import { SpringBootService, Show } from '../../services/spring-boot.service';
               {{ age.label }}
             </button>
           </div>
+
+          <!-- Type -->
+          <div class="flex flex-wrap gap-2 justify-center">
+            <span class="w-full text-center text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Type</span>
+            <button 
+              *ngFor="let type of typeFilters"
+              (click)="applyTypeFilter(type.id)"
+              [ngClass]="activeTypeFilter === type.id ? 'bg-purple-500 text-white border-purple-500 shadow-md' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'"
+              class="px-4 py-2 rounded-full text-sm font-semibold border-2 transition-all duration-200"
+            >
+              {{ type.label }}
+            </button>
+          </div>
         </div>
 
         <!-- Results Header -->
@@ -165,7 +178,10 @@ import { SpringBootService, Show } from '../../services/spring-boot.service';
 
               <!-- Info Section -->
               <div class="p-3 bg-white border-t border-gray-50">
-                <h4 class="font-bold text-gray-900 text-sm mb-1 line-clamp-1">{{ show.title }}</h4>
+                <h4 class="font-bold text-gray-900 text-sm mb-1 line-clamp-1">
+                  {{ show.title }}
+                  <span *ngIf="!show.is_verified" class="ml-2 px-2 py-0.5 bg-orange-100 text-orange-700 text-[10px] font-bold rounded-full">Estimation</span>
+                </h4>
                 <div class="flex items-center gap-2 mb-2">
                    <span class="px-1.5 py-0.5 bg-gray-100 rounded text-[10px] font-bold text-gray-500">{{ show.age_recommendation || '0+' }}</span>
                    <span class="text-[10px] text-gray-400">⏱️ {{ show.average_shot_length || '?' }}s</span>
@@ -192,7 +208,10 @@ import { SpringBootService, Show } from '../../services/spring-boot.service';
       <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" (click)="closeModal()"></div>
       <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden relative z-10 transition-all transform scale-100">
           <div class="h-32 p-6 flex flex-col justify-end text-white" [style.background]="getModalGradient(selectedShow.composite_score)">
-              <h3 class="text-2xl font-black">{{ selectedShow.title }}</h3>
+              <h3 class="text-2xl font-black flex items-center gap-2">
+                {{ selectedShow.title }}
+                <span *ngIf="!selectedShow.is_verified" class="px-2 py-1 bg-orange-100 text-orange-700 text-sm font-bold rounded-full">Estimation</span>
+              </h3>
               <p class="text-sm opacity-90 font-medium">{{ selectedShow.evaluation_label }} • Score {{ selectedShow.composite_score }}/100</p>
           </div>
           <div class="p-8">
@@ -254,6 +273,13 @@ export class YukaDashboardComponent implements OnInit {
   ];
   activeAgeFilter = 'all';
 
+  typeFilters = [
+    { id: 'all', label: 'Tous' },
+    { id: 'movie', label: 'Films' },
+    { id: 'tv', label: 'Séries' }
+  ];
+  activeTypeFilter = 'all';
+
   constructor(private springBootService: SpringBootService) {}
 
   ngOnInit() {
@@ -295,6 +321,11 @@ export class YukaDashboardComponent implements OnInit {
     this.applyAllFilters();
   }
 
+  applyTypeFilter(typeId: string) {
+    this.activeTypeFilter = typeId;
+    this.applyAllFilters();
+  }
+
   applyFilter(filter: any) {
     this.activeFilter = filter.id;
     this.applyAllFilters();
@@ -317,6 +348,11 @@ export class YukaDashboardComponent implements OnInit {
     // Filtrage par âge
     if (this.activeAgeFilter !== 'all') {
       results = results.filter(s => s.age_recommendation === this.activeAgeFilter);
+    }
+
+    // Filtrage par type
+    if (this.activeTypeFilter !== 'all') {
+      results = results.filter(s => s.media_type === this.activeTypeFilter);
     }
 
     this.filteredShows = results;

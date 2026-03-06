@@ -2,6 +2,7 @@ scenedetect>=0.6.7
 opencv-python==4.10.0.84
 numpy==1.26.4
 yt-dlp==2024.12.13
+curl-cffi>=0.5.10
 requests==2.32.3
 python-dotenv==1.0.1
 flask==3.0.3

@@ -21,26 +21,20 @@ services:
     networks:
       - app-network
 
-  # Video Analyzer Service
+  # Video Analyzer Worker (traite la file d'attente)
   analyzer:
     build:
       context: ./video-analyzer-service
       dockerfile: Dockerfile
-    ports:
-      - "5000:5000"
+    container_name: mollo-analyzer
+    restart: always
+    env_file:
+      - ./video-analyzer-service/.env
     environment:
-      - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_KEY=${SUPABASE_KEY}
-      - TMDB_API_KEY=${TMDB_API_KEY}
-      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY}
+      - TEMP_DIR=/tmp/videos
     volumes:
-      - ./video-analyzer-service/temp:/app/temp
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      - ./video-analyzer-service/temp:/tmp/videos
+    # Plus de port exposé : c'est un worker headless
     networks:
       - app-network
 
