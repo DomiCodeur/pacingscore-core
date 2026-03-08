@@ -349,21 +349,24 @@ def main_loop():
     
     while True:
         try:
+            logger.debug("Recherche de tâches pending...")
             task = supabase_manager.get_next_pending_task()
             
             if task:
+                logger.info(f"Tâche trouvée: ID={task.get('id')} TMDB={task.get('tmdb_id')}")
                 success = process_task(task)
                 if success:
                     processed_count += 1
                     logger.info(f"📊 Total traité: {processed_count} tâches")
             else:
+                logger.debug("Aucune tâche pending, attente...")
                 time.sleep(POLL_INTERVAL)
                 
         except KeyboardInterrupt:
             logger.info("🛑 Arrêt demandé (Ctrl+C)")
             break
         except Exception as e:
-            logger.error(f"Erreur dans la boucle principale: {e}")
+            logger.error(f"Erreur dans la boucle principale: {e}", exc_info=True)
             time.sleep(POLL_INTERVAL)
     
     logger.info("👋 Worker arrêté")

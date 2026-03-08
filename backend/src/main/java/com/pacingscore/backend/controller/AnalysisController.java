@@ -68,7 +68,8 @@ public class AnalysisController {
                 "  Erreurs: " + totalFailed
             );
         } catch (Exception e) {
-            return ResponseEntity.status(500).body("Erreur lors du scan: " + e.getMessage());
+            e.printStackTrace(); // Log the full stack trace to stdout (captured by Docker logs)
+            return ResponseEntity.status(500).body("Erreur lors du scan: " + e.getClass().getSimpleName() + ": " + e.getMessage());
         }
     }
     

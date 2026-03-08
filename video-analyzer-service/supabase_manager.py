@@ -93,6 +93,7 @@ class SupabaseManager:
     def get_next_pending_task(self) -> Optional[Dict]:
         """
         Retrieve the next pending task and atomically mark it as 'processing'.
+        Orders by created_at (oldest first) to ensure FIFO.
         Returns the task dict or None.
         """
         # 1. Fetch first pending task (ordered by creation)
