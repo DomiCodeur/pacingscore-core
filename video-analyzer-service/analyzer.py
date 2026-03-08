@@ -640,7 +640,7 @@ class YouTubeDownloader:
         
         try:
             logger.info(f"[TELECHARGEMENT] {video_url} (start={start_time}s, duration={max_duration}s)")
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
             
             if result.returncode == 0 and os.path.exists(output_path):
                 logger.info(f"[SUCCES] Téléchargement: {output_path}")

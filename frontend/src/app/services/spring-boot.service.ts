@@ -33,15 +33,51 @@ export interface Show {
 })
 export class SpringBootService {
   
-  private apiUrl = 'http://localhost:8080/api';
+  private apiUrl = '/api';
   
   constructor(private http: HttpClient) {}
   
   /**
    * Récupérer tous les dessins animés depuis l'API Spring Boot
+   * (sans pagination)
    */
   getAllShows(): Observable<Show[]> {
-    return this.http.get<Show[]>(`${this.apiUrl}/shows`);
+    // Par souci de compatibilité, retourne tout (limité par le back à 10000)
+    return this.http.get<Show[]>(`${this.apiUrl}/shows?limit=10000`);
+  }
+
+  /**
+   * Récupérer les dessins animés avec pagination
+   * @param limit nombre d'éléments par page
+   * @param offset décalage (page * limit)
+   * @param age filtre d'âge (défaut "0+")
+   * @param minScore score minimum
+   * @param search recherche textuelle
+   * @param type type de média (movie/tv)
+   * @param verified si true, ne retourne que les shows avec score réel (analysés)
+   */
+  getAllShowsPaginated(limit: number, offset: number, age: string = 'all', minScore: number = 0, search?: string, type?: string, verified?: boolean): Observable<Show[]> {
+    let url = `${this.apiUrl}/shows?limit=${limit}&offset=${offset}&minScore=${minScore}`;
+    if (age && age !== 'all') {
+      url += `&age=${encodeURIComponent(age)}`;
+    }
+    if (search) {
+      url += `&search=${encodeURIComponent(search)}`;
+    }
+    if (type) {
+      url += `&type=${type}`;
+    }
+    if (verified) {
+      url += `&verified=true`;
+    }
+    return this.http.get<Show[]>(url);
+  }
+  
+  /**
+   * Récupérer le nombre total de shows réellement analysés (score réel)
+   */
+  getVerifiedShowsCount(): Observable<{count: number}> {
+    return this.http.get<{count: number}>(`${this.apiUrl}/shows/count/verified`);
   }
   
   /**

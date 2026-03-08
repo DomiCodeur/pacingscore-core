@@ -31,8 +31,11 @@ logger = logging.getLogger(__name__)
 # Paramètres
 POLL_INTERVAL = 5  # secondes entre chaque vérification de tâches
 MAX_ANALYSIS_DURATION = 120  # secondes max d'analyse (trailer)
-# Dossier temporaire : utiliser TEMP_DIR si défini (Docker), sinon un dossier local
-TEMP_DIR = os.getenv("TEMP_DIR", os.path.join(os.path.dirname(__file__), "temp_worker"))
+# Dossier temporaire : utiliser TEMP_DIR si défini, sinon un sous-dossier unique par conteneur
+base_temp = os.getenv("TEMP_DIR", "/tmp/videos")
+# Isoler par hostname de conteneur pour éviter les conflits entre workers scalés
+container_id = os.uname().nodename if hasattr(os, 'uname') else os.getenv("HOSTNAME", "unknown")
+TEMP_DIR = os.path.join(base_temp, container_id)
 os.makedirs(TEMP_DIR, exist_ok=True)
 
 # Services
@@ -230,6 +233,7 @@ def process_task(task: Dict[str, Any]) -> bool:
     
     logger.info(f"=== Traitement tâche {task_id} (TMDB ID: {tmdb_id}) ===")
     
+    video_path = None
     try:
         supabase_manager.update_analysis_task_status(task_id, "processing")
         
@@ -293,8 +297,8 @@ def process_task(task: Dict[str, Any]) -> bool:
         real_score = result.get("composite_score", result.get("pacing_score", 0))
         num_scenes = result.get("num_scenes", 0)
         scene_details = result.get("scene_details", [])
-        video_duration = result.get("video_duration", 0)
-        cuts_per_minute = (num_scenes / video_duration * 60) if video_duration > 0 else 0
+        video_duration_analysis = result.get("video_duration", 0)
+        cuts_per_minute = (num_scenes / video_duration_analysis * 60) if video_duration_analysis > 0 else 0
         motion_intensity = result.get("motion_analysis", {}).get("motion_intensity", 0.0)
         
         logger.info(f"Résultat: ASL={asl:.2f}s, Score={real_score:.1f}, Scènes={num_scenes}, CPM={cuts_per_minute:.2f}, Motion={motion_intensity:.2f}")
@@ -308,21 +312,14 @@ def process_task(task: Dict[str, Any]) -> bool:
             source=episode_info.get('source', 'unknown'),
             video_type='episode' if media_type == 'tv' else 'film',
             cuts_per_minute=cuts_per_minute,
-            video_duration=video_duration,
-            motion_intensity=motion_intensity
+            video_duration=video_duration_analysis,
+            motion_intensity=motion_intensity,
+            metadata=meta  # transmet les métadonnées complètes de la tâche
         )
         
         if not success:
             logger.error(f"Échec sauvegarde Mollo pour TMDB ID {tmdb_id} - tâche {task_id}")
             raise Exception("Échec de la sauvegarde du score Mollo")
-        
-        # Nettoyage vidéo après succès
-        try:
-            if os.path.exists(video_path):
-                os.remove(video_path)
-                logger.info(f"Vidéo supprimée: {video_path}")
-        except Exception as e:
-            logger.warning(f"Impossible de supprimer la vidéo {video_path}: {e}")
         
         supabase_manager.mark_task_completed(task_id)
         logger.info(f"✅ Tâche {task_id} terminée avec succès")
@@ -331,12 +328,15 @@ def process_task(task: Dict[str, Any]) -> bool:
     except Exception as e:
         logger.error(f"❌ Erreur sur tâche {task_id}: {e}")
         supabase_manager.mark_task_failed(task_id, str(e))
-        try:
-            if 'video_path' in locals() and os.path.exists(video_path):
-                os.remove(video_path)
-        except:
-            pass
         return False
+        
+    finally:
+        if video_path and os.path.exists(video_path):
+            try:
+                os.remove(video_path)
+                logger.info(f"Vidéo supprimée: {video_path}")
+            except Exception as e:
+                logger.warning(f"Impossible de supprimer la vidéo {video_path}: {e}")
 
 
 def main_loop():

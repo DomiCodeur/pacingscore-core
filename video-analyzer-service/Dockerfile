@@ -24,7 +24,7 @@ RUN pip install --no-cache-dir -U yt-dlp
 # Copier le reste du code
 COPY . .
 
-# Créer le dossier temporaire
+# Créer le dossier temporaire et sous-dossiers par conteneur (via variable d'env HOSTNAME)
 RUN mkdir -p /tmp/videos && chmod 777 /tmp/videos
 
 # Exposer le port

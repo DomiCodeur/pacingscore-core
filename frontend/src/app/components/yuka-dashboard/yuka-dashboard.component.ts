@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, HostListener } from '@angular/core';
 import { FormControl } from '@angular/forms';
 import { debounceTime, distinctUntilChanged, switchMap, catchError, of } from 'rxjs';
 import { SpringBootService, Show } from '../../services/spring-boot.service';
@@ -61,8 +61,8 @@ import { SpringBootService, Show } from '../../services/spring-boot.service';
         <!-- Stats -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
           <div class="bg-white rounded-2xl p-6 shadow-sm">
-            <div class="text-3xl font-bold text-green-500">{{ shows.length }}</div>
-            <div class="text-sm text-gray-500 font-medium">Dessins animés</div>
+            <div class="text-3xl font-bold text-green-500">{{ totalShowsToDisplay }}</div>
+            <div class="text-sm text-gray-500 font-medium">Dessins animés analysés</div>
           </div>
           <div class="bg-white rounded-2xl p-6 shadow-sm">
             <div class="text-3xl font-bold text-green-500">{{ getAverageScore().toFixed(1) }}</div>
@@ -190,7 +190,6 @@ import { SpringBootService, Show } from '../../services/spring-boot.service';
               <div class="p-3 bg-white border-t border-gray-50">
                 <h4 class="font-bold text-gray-900 text-sm mb-1 line-clamp-1">
                   {{ show.title }}
-                  <span *ngIf="!show.is_verified" class="ml-2 px-2 py-0.5 bg-orange-100 text-orange-700 text-[10px] font-bold rounded-full">Estimation</span>
                 </h4>
                 <div class="flex items-center gap-2 mb-2">
                    <span class="px-1.5 py-0.5 bg-gray-100 rounded text-[10px] font-bold text-gray-500">{{ show.age_recommendation || '0+' }}</span>
@@ -210,6 +209,16 @@ import { SpringBootService, Show } from '../../services/spring-boot.service';
           <h3 class="text-xl font-semibold text-gray-900 mb-2">Aucun résultat trouvé</h3>
           <p class="text-gray-500">Essayez une autre recherche.</p>
         </div>
+
+        <!-- Chargement de plus de pages -->
+        <div *ngIf="loadingMore" class="flex justify-center py-8">
+          <div class="animate-spin rounded-full h-10 w-10 border-4 border-green-500 border-t-transparent"></div>
+        </div>
+
+        <!-- Fin des résultats -->
+        <div *ngIf="!hasMore && filteredShows.length > 0" class="text-center py-8 text-gray-500 text-sm font-medium">
+          Tous les résultats sont affichés
+        </div>
       </ng-container>
     </main>
 
@@ -220,7 +229,6 @@ import { SpringBootService, Show } from '../../services/spring-boot.service';
           <div class="h-32 p-6 flex flex-col justify-end text-white" [style.background]="getModalGradient(selectedShow.composite_score)">
               <h3 class="text-2xl font-black flex items-center gap-2">
                 {{ selectedShow.title }}
-                <span *ngIf="!selectedShow.is_verified" class="px-2 py-1 bg-orange-100 text-orange-700 text-sm font-bold rounded-full">Estimation</span>
               </h3>
               <p class="text-sm opacity-90 font-medium">{{ selectedShow.evaluation_label }} • Score {{ selectedShow.composite_score }}/100</p>
           </div>
@@ -262,9 +270,14 @@ export class YukaDashboardComponent implements OnInit {
   shows: Show[] = [];
   filteredShows: Show[] = [];
   loading = false;
+  loadingMore = false;
+  hasMore = true;
+  pageSize = 50;
+  currentPage = 0;
   searchControl = new FormControl('');
   selectedShow: Show | null = null;
   activeFilter = 'all';
+  totalShows = 0; // nombre total de shows réellement analysés
 
     filters = [
     { id: 'all', label: 'Tous' },
@@ -293,15 +306,49 @@ export class YukaDashboardComponent implements OnInit {
   constructor(private springBootService: SpringBootService) {}
 
   ngOnInit() {
-    this.loadShows();
+    // Charger le nombre total de shows vérifiés
+    this.springBootService.getVerifiedShowsCount().subscribe({
+      next: (res) => {
+        this.totalShows = res.count;
+      },
+      error: (err) => {
+        console.error('Erreur chargement compte', err);
+        this.totalShows = 0;
+      }
+    });
 
+    // Charger la première page de shows vérifiés
+    this.loadPage(0);
+
+    // Recherche : réinitialiser la pagination et charger depuis la page 0
     this.searchControl.valueChanges.pipe(
       debounceTime(400),
       distinctUntilChanged(),
       switchMap((term) => {
+        this.resetPagination();
         this.loading = true;
-        if (term) return this.springBootService.searchShows(term);
-        return this.springBootService.getAllShows();
+        if (term) {
+          // Recherche : on utilise getAllShowsPaginated avec le terme de recherche
+          return this.springBootService.getAllShowsPaginated(
+            this.pageSize, 
+            0, 
+            this.activeAgeFilter,
+            0,
+            term,
+            this.activeTypeFilter === 'all' ? undefined : this.activeTypeFilter,
+            true // verified only
+          );
+        } else {
+          return this.springBootService.getAllShowsPaginated(
+            this.pageSize, 
+            0,
+            this.activeAgeFilter,
+            0,
+            undefined,
+            this.activeTypeFilter === 'all' ? undefined : this.activeTypeFilter,
+            true // verified only
+          );
+        }
       }),
       catchError(() => {
         this.loading = false;
@@ -310,8 +357,82 @@ export class YukaDashboardComponent implements OnInit {
     ).subscribe((shows) => {
       this.loading = false;
       this.shows = shows;
+      this.hasMore = shows.length >= this.pageSize;
+      this.currentPage = 0;
       this.applyCurrentFilter();
     });
+  }
+
+  @HostListener('window:scroll', [])
+  onWindowScroll(): void {
+    this.handleScroll();
+  }
+
+  private handleScroll(): void {
+    if (this.loading || this.loadingMore || !this.hasMore) {
+      return;
+    }
+    // Vérifier si on est proche du bas (200px)
+    const windowHeight = window.innerHeight;
+    const documentHeight = document.documentElement.scrollHeight;
+    const scrollTop = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+    if (scrollTop + windowHeight >= documentHeight - 200) {
+      this.loadNextPage();
+    }
+  }
+
+  loadPage(page: number): void {
+    if (page === 0) {
+      this.loading = true;
+    } else {
+      this.loadingMore = true;
+    }
+    const age = this.activeAgeFilter;
+    this.springBootService.getAllShowsPaginated(
+      this.pageSize,
+      page * this.pageSize,
+      age,
+      0, // minScore non filtré ici
+      undefined,
+      this.activeTypeFilter === 'all' ? undefined : this.activeTypeFilter,
+      true // verified only
+    ).subscribe({
+      next: (newShows) => {
+        if (page === 0) {
+          this.shows = newShows;
+        } else {
+          this.shows = [...this.shows, ...newShows];
+        }
+        this.hasMore = newShows.length >= this.pageSize;
+        if (page === 0) {
+          this.loading = false;
+        } else {
+          this.loadingMore = false;
+        }
+        this.applyCurrentFilter();
+      },
+      error: (err) => {
+        console.error('Erreur chargement page', page, err);
+        if (page === 0) {
+          this.loading = false;
+          this.shows = [];
+          this.filteredShows = [];
+        } else {
+          this.loadingMore = false;
+        }
+      }
+    });
+  }
+
+  loadNextPage(): void {
+    if (!this.hasMore || this.loadingMore) return;
+    this.currentPage++;
+    this.loadPage(this.currentPage);
+  }
+
+  resetPagination(): void {
+    this.currentPage = 0;
+    this.hasMore = true;
   }
 
   loadShows() {
@@ -327,11 +448,13 @@ export class YukaDashboardComponent implements OnInit {
   }
 
   loadLatestShows() {
+    this.resetPagination();
     this.loading = true;
     this.springBootService.getLatestShows(20).subscribe({
       next: (shows) => {
         this.shows = shows;
-        this.filteredShows = shows;
+        this.hasMore = false; // les latest ne sont pas paginés
+        this.applyCurrentFilter();
         this.loading = false;
       },
       error: () => this.loading = false
@@ -423,6 +546,10 @@ export class YukaDashboardComponent implements OnInit {
       'full': 'Complet'
     };
     return labels[type] || type;
+  }
+
+  get totalShowsToDisplay(): number {
+    return this.totalShows > 0 ? this.totalShows : this.shows.length;
   }
 
   openModal(show: Show) {

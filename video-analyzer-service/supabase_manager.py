@@ -62,7 +62,26 @@ class SupabaseManager:
     # ============ NEW METHODS (Gemini Architecture) ============
     
     def get_metadata_estimation(self, tmdb_id: str) -> Optional[Dict]:
-        """Fetch TMDB estimation for a given tmdb_id"""
+        """
+        Fetch metadata for a given tmdb_id.
+        Priority: analysis_tasks (completed/pending) first, then metadata_estimations (legacy).
+        Returns the complete metadata dict.
+        """
+        # 1. Chercher dans analysis_tasks (contient metadata JSONB)
+        params = {"tmdb_id": f"eq.{tmdb_id}", "select": "metadata,media_type", "limit": "1"}
+        response = self._request("GET", "analysis_tasks", params=params)
+        if response and response.status_code == 200:
+            data = response.json()
+            if data and len(data) > 0 and data[0].get("metadata"):
+                task = data[0]
+                meta = task["metadata"]
+                if isinstance(meta, dict):
+                    # S'assurer que media_type est présent
+                    if "media_type" not in meta and task.get("media_type"):
+                        meta["media_type"] = task["media_type"]
+                    return meta
+        
+        # 2. Fallback sur metadata_estimations (legacy)
         params = {"tmdb_id": f"eq.{tmdb_id}", "select": "*", "limit": "1"}
         response = self._request("GET", "metadata_estimations", params=params)
         if response and response.status_code == 200:
@@ -120,7 +139,8 @@ class SupabaseManager:
     
     def save_mollo_score(self, tmdb_id: str, real_score: float, asl: float, video_url: str, scene_details: List[Dict],
                          source: str = None, video_type: str = None,
-                         cuts_per_minute: float = None, video_duration: float = None, motion_intensity: float = None) -> bool:
+                         cuts_per_minute: float = None, video_duration: float = None, motion_intensity: float = None,
+                         metadata: Dict = None) -> bool:
         """Save the actual Mollo score to mollo_scores table (upsert on tmdb_id)"""
         data = {
             "tmdb_id": tmdb_id,
@@ -141,6 +161,8 @@ class SupabaseManager:
             data["video_duration"] = video_duration
         if motion_intensity is not None:
             data["motion_intensity"] = motion_intensity
+        if metadata is not None:
+            data["metadata"] = metadata
         
         logger.info(f"[DEBUG] Saving mollo_score: tmdb_id={tmdb_id}, data_keys={list(data.keys())}")
         # Use merge-duplicates to perform upsert

@@ -13,6 +13,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Map;
+import java.util.HashMap;
 
 @RestController
 @RequestMapping("/api/analysis")
@@ -92,9 +95,8 @@ public class AnalysisController {
                 // Vérifier si la série existe déjà
                 if (!supabaseService.showExists(show.getId())) {
                     try {
-                        // Nouvelle architecture : sauver l'estimation + créer une tâche d'analyse
-                        supabaseService.saveMetadataEstimation(show);
-                        supabaseService.createAnalysisTask(show.getId(), show.getMediaType());
+                        // Nouvelle architecture : créer une tâche d'analyse avec métadonnées complètes
+                        supabaseService.createAnalysisTask(show);
                         saved++;
                         Thread.sleep(500); // Pause pour respecter les limites d'API
                     } catch (Exception e) {
@@ -112,6 +114,40 @@ public class AnalysisController {
             );
         } catch (Exception e) {
             return ResponseEntity.status(500).body("Erreur: " + e.getMessage());
+        }
+    }
+
+    @PostMapping("/massive-import")
+    public ResponseEntity<String> massiveImport() {
+        try {
+            String result = tmdbScannerService.performMassiveImport();
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Erreur lors du massive import: " + e.getMessage());
+        }
+    }
+
+    /* scan-diverse désactivé car scanner limité à l'animation */
+
+    @PostMapping("/reset-failed")
+    public ResponseEntity<String> resetFailed() {
+        int count = supabaseService.resetFailedTasks();
+        return ResponseEntity.ok("Réinitialisation terminée : " + count + " tâches remises en 'pending'.");
+    }
+
+    /**
+     * Monitoring simple de la file d'analyse
+     */
+    @GetMapping("/queue-status")
+    public ResponseEntity<Map<String, Integer>> getQueueStatus() {
+        try {
+            Map<String, Integer> counts = supabaseService.getAnalysisQueueStatus();
+            return ResponseEntity.ok(counts);
+        } catch (Exception e) {
+            e.printStackTrace();
+            Map<String, Integer> err = new HashMap<>();
+            err.put("error", 1);
+            return ResponseEntity.ok(err);
         }
     }
 }

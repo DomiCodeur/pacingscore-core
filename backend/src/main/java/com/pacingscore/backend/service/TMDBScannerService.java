@@ -33,12 +33,17 @@ public class TMDBScannerService {
      * @param force si true, réanalyse même les séries déjà présentes en base
      */
     public ScanResult scanChildrenAnimations(boolean force) {
+        return scanChildrenAnimations(force, 1, 5);
+    }
+
+    public ScanResult scanChildrenAnimations(boolean force, int maxPages) {
+        return scanChildrenAnimations(force, 1, maxPages);
+    }
+
+    public ScanResult scanChildrenAnimations(boolean force, int startPage, int maxPages) {
         ScanResult result = new ScanResult();
 
-        // Pages à scanner
-        int maxPages = 5;
-
-        for (int page = 1; page <= maxPages; page++) {
+        for (int page = startPage; page < startPage + maxPages; page++) {
             try {
                 System.out.println("Scanning page " + page + "/" + maxPages);
 
@@ -73,6 +78,22 @@ public class TMDBScannerService {
                     ShowInfo show = fetchMediaDetails(showId, "tv", showJson);
 
                     if (show != null) {
+                        // Filtre absolu : seulement genre 16 (Animation)
+                        List<String> genres = show.getGenres();
+                        if (genres == null || !genres.contains("16")) {
+                            System.out.println(" => Skipping (no Animation genre)");
+                            result.skippedAge++;
+                            continue;
+                        }
+
+                        // Blacklist titre
+                        String titleLower = show.getTitle() != null ? show.getTitle().toLowerCase() : "";
+                        if (titleLower.contains("terrorist") || titleLower.contains("pulse") || titleLower.contains("jennifer") || titleLower.contains("muthers") || titleLower.contains("dead") || titleLower.contains("horror")) {
+                            System.out.println(" => Skipping (blacklist title)");
+                            result.skippedAge++;
+                            continue;
+                        }
+
                         // Déterminer l'âge
                         String age = determineAgeRating(show);
                         show.setAgeRating(age);
@@ -97,9 +118,8 @@ public class TMDBScannerService {
                             show.setAgeRating(age);
                         }
 
-                        // Sauvegarder l'estimation et créer une tâche d'analyse
-                        supabaseService.saveMetadataEstimation(show);
-                        supabaseService.createAnalysisTask(show.getId(), show.getMediaType());
+                        // Créer une tâche d'analyse avec métadonnées complètes (pas d'estimation séparée)
+                        supabaseService.createAnalysisTask(show);
 
                         result.analyzed++;
                         result.processedShows.add(show);
@@ -130,9 +150,17 @@ public class TMDBScannerService {
      * @param force si true, réanalyse même les films déjà présents en base
      */
     public ScanResult scanMovies(boolean force) {
-        ScanResult result = new ScanResult();
+        return scanMovies(force, 5);
+    }
 
-        int maxPages = 5;
+    /**
+     * Scanne les films d'animation pour enfants sur TMDB (version paramétrable)
+     * Utilise discover/movie avec genres Animation + Family
+     * @param force si true, réanalyse même les films déjà présents en base
+     * @param maxPages nombre de pages à scanner (5 par défaut)
+     */
+    public ScanResult scanMovies(boolean force, int maxPages) {
+        ScanResult result = new ScanResult();
 
         for (int page = 1; page <= maxPages; page++) {
             try {
@@ -170,6 +198,22 @@ public class TMDBScannerService {
                     ShowInfo show = fetchMediaDetails(movieId, "movie", movieJson);
 
                     if (show != null) {
+                        // Filtre absolu : seulement genre 16 (Animation)
+                        List<String> genres = show.getGenres();
+                        if (genres == null || !genres.contains("16")) {
+                            System.out.println(" => Skipping (no Animation genre)");
+                            result.skippedAge++;
+                            continue;
+                        }
+
+                        // Blacklist titre
+                        String titleLower = show.getTitle() != null ? show.getTitle().toLowerCase() : "";
+                        if (titleLower.contains("terrorist") || titleLower.contains("pulse") || titleLower.contains("jennifer") || titleLower.contains("muthers") || titleLower.contains("dead") || titleLower.contains("horror")) {
+                            System.out.println(" => Skipping (blacklist title)");
+                            result.skippedAge++;
+                            continue;
+                        }
+
                         // Déterminer l'âge (adapté pour les films)
                         String age = determineAgeRating(show);
                         show.setAgeRating(age);
@@ -192,9 +236,8 @@ public class TMDBScannerService {
                             show.setAgeRating(age);
                         }
 
-                        // Sauvegarder l'estimation et créer une tâche d'analyse
-                        supabaseService.saveMetadataEstimation(show);
-                        supabaseService.createAnalysisTask(show.getId(), show.getMediaType());
+                        // Créer une tâche d'analyse avec métadonnées complètes (pas d'estimation séparée)
+                        supabaseService.createAnalysisTask(show);
                         
                         result.analyzed++;
                         result.processedShows.add(show);
@@ -218,6 +261,93 @@ public class TMDBScannerService {
         }
 
         return result;
+    }
+
+    /**
+     * Lance un import massif de 50 pages pour TV et films.
+     * Retourne un résumé textuel des résultats.
+     */
+    /**
+     * Lance un import massif diversifié (Séries Enfants, Films d'animation, et Médias plus âgés)
+     */
+    public String performMassiveImport() {
+        // 1. Séries Enfants (0-6 ans) - pages 1 à 20
+        scanChildrenAnimations(false, 20); 
+        
+        // 2. Films d'animation (Grand public) - pages 1 à 25
+        scanMovies(false, 25);
+
+        // 3. Séries d'animation variées (pré-ados/ados) - pages 1 à 15
+        try {
+            for (int page = 1; page <= 15; page++) {
+                scanGenreSpecific("tv", "16", page); // Animation seule
+                scanGenreSpecific("tv", "16,10759", page); // Animation + Action/Adventure
+            }
+        } catch (Exception e) {
+            System.err.println("Erreur scan séries variées: " + e.getMessage());
+        }
+
+        return "Import massif d'animation lancé ! Seuls les genres Animation (et Famille pour jeunes enfants) sont importés. Consultez les logs.";
+    }
+
+    /**
+     * Scan spécifique par combinaison de genres (pour élargir la variété d'âges)
+     */
+    private void scanGenreSpecific(String type, String genres, int page) throws Exception {
+        try {
+            String discoveryUrl = "https://api.themoviedb.org/3/discover/" + type
+                + "?api_key=" + tmdbApiKey
+                + "&language=fr-FR"
+                + "&with_genres=" + genres
+                + "&sort_by=popularity.desc"
+                + "&page=" + page;
+
+            String response = restTemplate.getForObject(discoveryUrl, String.class);
+            JSONObject json = new JSONObject(response);
+            JSONArray results = json.getJSONArray("results");
+
+            for (int i = 0; i < results.length(); i++) {
+                JSONObject itemJson = results.getJSONObject(i);
+                int id = itemJson.getInt("id");
+                
+                if (showAlreadyAnalyzed(id)) continue;
+                
+                ShowInfo show = fetchMediaDetails(id, type, itemJson);
+                if (show != null) {
+                    // Filtre absolu : seulement genre 16 (Animation)
+                    List<String> showGenres = show.getGenres();
+                    if (showGenres == null || !showGenres.contains("16")) {
+                        System.out.println(" => Skipping (no Animation genre)");
+                        continue;
+                    }
+
+                    // Blacklist titre
+                    String titleLower = show.getTitle() != null ? show.getTitle().toLowerCase() : "";
+                    if (titleLower.contains("terrorist") || titleLower.contains("pulse") || titleLower.contains("jennifer") || titleLower.contains("muthers") || titleLower.contains("dead") || titleLower.contains("horror")) {
+                        System.out.println(" => Skipping (blacklist title)");
+                        continue;
+                    }
+
+                    // Déterminer l'âge
+                    String age = determineAgeRating(show);
+                    show.setAgeRating(age);
+
+                    // Validation croisée
+                    if ((age.equals("0+") || age.equals("3+")) && show.getPacingScore() < 60) {
+                        System.out.println(" =>[Mollo] Pacing too high for age " + age + " (score:" + show.getPacingScore() + ") → adjusting to 6+");
+                        age = "6+";
+                        show.setAgeRating(age);
+                    }
+
+                    // Sauvegarde via tâche d'analyse
+                    supabaseService.createAnalysisTask(show);
+                    System.out.println("✓ Analyzed & queued: " + show.getTitle() + " (score:" + show.getPacingScore() + "%, age:" + age + ")");
+                }
+                Thread.sleep(200);
+            }
+        } catch (Exception e) {
+            System.err.println("Erreur scan genre " + genres + " page " + page + ": " + e.getMessage());
+        }
     }
 
     private boolean showAlreadyAnalyzed(int tmdbId) {
@@ -373,6 +503,13 @@ public class TMDBScannerService {
         String descLower = show.getDescription() != null ? show.getDescription().toLowerCase() : "";
         List<String> genreIds = show.getGenres();
 
+        // Si les genres contiennent Horror (27), Thriller (53), Crime (80) → 18+
+        if (genreIds != null) {
+            if (genreIds.contains("27") || genreIds.contains("53") || genreIds.contains("80")) {
+                return "18+";
+            }
+        }
+
         // 0. HARD-BLACKLIST : Franchises d'action → pas en dessous de 6+
         // Priorité absolue : si le titre contient un mot d'action, on ne peut pas être 0+ ou 3+
         String[] actionFranchises = {"avengers", "spiderman", "spider-man", "jurassic", "ninja", "beyblade", "star wars", "justice league", "superhero", "batman", "transformers", "power rangers", "lego", " marvel"};
@@ -518,6 +655,15 @@ public class TMDBScannerService {
 
         return score;
     }
+
+    /**
+     * Scan "diversifié" sur des pages plus lointaines (ex: 51-100) sans filtre de genre,
+     * pour capturer des médias avec des âges plus variés (6+, 10+, 12+, 14+).
+     * Les médias 18+ sont exclus pour rester familial large.
+     */
+    /* DÉSACTIVÉ - scanDiverse supprimé car import non-animé */
+
+    /* DÉSACTIVÉ - scanGeneralPage supprimé car import non-animé */
 
     // Classe interne pour stocker les résultats du scan
     public static class ScanResult {

@@ -26,6 +26,46 @@ public class SupabaseService {
      * Save a show estimation from TMDB into metadata_estimations table
      * Uses upsert on tmdb_id to avoid duplicates.
      */
+    /**
+     * Réinitialise les tâches en échec pour qu'elles soient retraitées
+     */
+    public int resetFailedTasks() {
+        try {
+            String url = supabaseConfig.getUrl() + "/rest/v1/analysis_tasks?status=eq.failed";
+            
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("apikey", supabaseConfig.getKey());
+            headers.set("Authorization", "Bearer " + supabaseConfig.getKey());
+            headers.set("Content-Type", "application/json");
+            headers.set("Accept", "application/json");
+            headers.set("X-HTTP-Method-Override", "PATCH");
+
+            // Simplifions le payload : seulement le champ à changer
+            String jsonPayload = "{\"status\":\"pending\"}";
+            HttpEntity<String> entity = new HttpEntity<>(jsonPayload, headers);
+
+            // Utilise POST avec override car RestTemplate par défaut ne supporte pas PATCH
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
+            int statusCode = response.getStatusCodeValue();
+            String body = response.getBody();
+            
+            System.out.println("[DEBUG] Reset failed response status: " + statusCode);
+            System.out.println("[DEBUG] Reset failed response body: " + body);
+            
+            // Si Supabase retourne un tableau JSON, on peut le parser approximativement
+            if (body != null && !body.isBlank() && body.startsWith("[") && body.endsWith("]")) {
+                // Compter les objets dans le tableau approximativement
+                long count = body.chars().filter(ch -> ch == '{').count();
+                return (int) count;
+            }
+            return 0;
+        } catch (Exception e) {
+            System.err.println("Erreur reset failed: " + e.getMessage());
+            e.printStackTrace();
+            return 0;
+        }
+    }
+
     public void saveMetadataEstimation(ShowInfo show) {
         String endpoint = supabaseConfig.getUrl() + "/rest/v1/metadata_estimations";
 
@@ -71,18 +111,78 @@ public class SupabaseService {
             System.err.println("Error saving estimation: " + show.getTitle() + " - " + e.getMessage());
         }
     }
+
+    /**
+     * Récupère le statut de la file d'analyse (pour monitoring)
+     * Retourne une map avec les comptes par statut
+     */
+    public Map<String, Integer> getAnalysisQueueStatus() {
+        String endpoint = supabaseConfig.getUrl() + "/rest/v1/analysis_tasks?select=status&order=id.desc&limit=2000";
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("apikey", supabaseConfig.getKey());
+        headers.set("Authorization", "Bearer " + supabaseConfig.getKey());
+        HttpEntity<String> entity = new HttpEntity<>(headers);
+        try {
+            ResponseEntity<String> response = restTemplate.exchange(endpoint, HttpMethod.GET, entity, String.class);
+            String body = response.getBody();
+            if (body == null) {
+                return Map.of("error", 0);
+            }
+            // Compter les statuts
+            int pending = 0, processing = 0, completed = 0, failed = 0;
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            List<Map<String, Object>> tasks = mapper.readValue(body,
+                mapper.getTypeFactory().constructCollectionType(List.class, Map.class));
+            for (Map<String, Object> t : tasks) {
+                String st = (String) t.get("status");
+                switch (st) {
+                    case "pending": pending++; break;
+                    case "processing": processing++; break;
+                    case "completed": completed++; break;
+                    case "failed": failed++; break;
+                }
+            }
+            Map<String, Integer> counts = new HashMap<>();
+            counts.put("pending", pending);
+            counts.put("processing", processing);
+            counts.put("completed", completed);
+            counts.put("failed", failed);
+            counts.put("total", tasks.size());
+            return counts;
+        } catch (Exception e) {
+            e.printStackTrace();
+            Map<String, Integer> err = new HashMap<>();
+            err.put("error", 1);
+            return err;
+        }
+    }
     
     /**
      * Create a video analysis task for the Python worker
-     * Includes media_type to help worker choose search strategy
+     * Includes media_type and full metadata JSONB to avoid needing metadata_estimations
      */
-    public void createAnalysisTask(int tmdbId, String mediaType) {
+    public void createAnalysisTask(ShowInfo show) {
         String endpoint = supabaseConfig.getUrl() + "/rest/v1/analysis_tasks";
 
         Map<String, Object> data = new HashMap<>();
-        data.put("tmdb_id", String.valueOf(tmdbId));
-        data.put("media_type", mediaType); // "movie" ou "tv"
-        // status defaults to 'pending' in DB
+        data.put("tmdb_id", String.valueOf(show.getId()));
+        data.put("media_type", show.getMediaType()); // "movie" ou "tv"
+
+        // Build metadata JSONB : toutes les infos nécessaires pour le worker et frontend
+        Map<String, Object> metadata = new HashMap<>();
+        metadata.put("title", show.getTitle());
+        metadata.put("description", show.getDescription());
+        metadata.put("poster_path", show.getPosterPath());
+        metadata.put("backdrop_path", show.getBackdropPath());
+        metadata.put("first_air_date", show.getFirstAirDate());
+        metadata.put("genres", show.getGenres());
+        metadata.put("networks", show.getNetwork());
+        metadata.put("keywords", show.getKeywords());
+        metadata.put("episode_runtime", show.getEpisodeRuntime());
+        metadata.put("certifications", show.getCertifications());
+        metadata.put("episode_count", show.getEpisodeCount());
+        metadata.put("season_count", show.getSeasonCount());
+        data.put("metadata", metadata);
 
         HttpHeaders headers = new HttpHeaders();
         headers.set("apikey", supabaseConfig.getKey());
@@ -96,36 +196,46 @@ public class SupabaseService {
             // Add on_conflict=tmdb_id to avoid duplicate key errors
             URI uri = new URI(endpoint + "?on_conflict=tmdb_id");
             restTemplate.postForEntity(uri, request, String.class);
-            System.out.println("Analysis task created/upserted for TMDB ID: " + tmdbId + " (type: " + mediaType + ")");
+            System.out.println("Analysis task created/upserted for TMDB ID: " + show.getId() + " (type: " + show.getMediaType() + ")");
         } catch (Exception e) {
-            System.err.println("Error creating task for TMDB ID " + tmdbId + ": " + e.getMessage());
+            System.err.println("Error creating task for TMDB ID " + show.getId() + ": " + e.getMessage());
         }
     }
     
     /**
-     * Check if a show already exists in metadata_estimations
+     * Check if a show already exists (has analysis task or score)
      */
     public boolean showExists(int tmdbId) {
-        String endpoint = supabaseConfig.getUrl() + "/rest/v1/metadata_estimations";
-        
+        // Check analysis_tasks first
+        String endpoint = supabaseConfig.getUrl() + "/rest/v1/analysis_tasks";
         HttpHeaders headers = new HttpHeaders();
         headers.set("apikey", supabaseConfig.getKey());
         headers.set("Authorization", "Bearer " + supabaseConfig.getKey());
-        headers.set("Prefer", "count=exact");
-        
         HttpEntity<String> request = new HttpEntity<>(headers);
-        
         try {
-            String url = endpoint + "?tmdb_id=eq." + tmdbId + "&select=tmdb_id";
-            ResponseEntity<List> response = restTemplate.exchange(
-                url, HttpMethod.GET, request, List.class
-            );
-            List<?> body = response.getBody();
-            return body != null && !body.isEmpty();
+            String url = endpoint + "?tmdb_id=eq." + tmdbId + "&select=tmdb_id&limit=1";
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, request, String.class);
+            if (response.getStatusCode().is2xxSuccessful()) {
+                String body = response.getBody();
+                if (body != null && !body.trim().isEmpty() && !body.equals("[]")) {
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            // fallthrough to check mollo_scores
+        }
+        // Also check mollo_scores (already analyzed)
+        try {
+            String scoresEndpoint = supabaseConfig.getUrl() + "/rest/v1/mollo_scores?tmdb_id=eq." + tmdbId + "&select=tmdb_id&limit=1";
+            ResponseEntity<String> response = restTemplate.exchange(scoresEndpoint, HttpMethod.GET, request, String.class);
+            if (response.getStatusCode().is2xxSuccessful()) {
+                String body = response.getBody();
+                return body != null && !body.trim().isEmpty() && !body.equals("[]");
+            }
         } catch (Exception e) {
             e.printStackTrace();
-            return false;
         }
+        return false;
     }
     
     /**

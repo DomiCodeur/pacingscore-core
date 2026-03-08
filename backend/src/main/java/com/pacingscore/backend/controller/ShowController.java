@@ -78,218 +78,156 @@ public class ShowController {
             @Parameter(in = ParameterIn.QUERY, description = "Filtrer par titre (recherche partielle)", schema = @Schema(type = "string"))
             @RequestParam(required = false) String search,
             @Parameter(in = ParameterIn.QUERY, description = "Filtrer par type de média (movie ou tv)", schema = @Schema(type = "string"))
-            @RequestParam(required = false) String type) {
+            @RequestParam(required = false) String type,
+            @Parameter(in = ParameterIn.QUERY, description = "Nombre d'éléments à retourner (pagination)", schema = @Schema(type = "number", defaultValue = "50"))
+            @RequestParam(required = false) Integer limit,
+            @Parameter(in = ParameterIn.QUERY, description = "Offset pour pagination", schema = @Schema(type = "number", defaultValue = "0"))
+            @RequestParam(required = false) Integer offset,
+            @Parameter(in = ParameterIn.QUERY, description = "Ne retourner que les shows avec score réel (vérifiés)", schema = @Schema(type = "boolean", defaultValue = "false"))
+            @RequestParam(required = false) Boolean verified) {
         
         try {
-            // 1. Récupérer les estimations depuis metadata_estimations
             HttpHeaders headers = new HttpHeaders();
             headers.set("apikey", supabaseConfig.getKey());
             headers.set("Authorization", "Bearer " + supabaseConfig.getKey());
             
-            StringBuilder query = new StringBuilder("?order=estimated_score.desc&limit=200");
+            int queryLimit = (limit != null && limit > 0) ? limit : 50;
+            int queryOffset = (offset != null && offset > 0) ? offset : 0;
+            
+            StringBuilder query = new StringBuilder("?order=created_at.desc");
+            query.append("&limit=").append(queryLimit);
+            if (queryOffset > 0) {
+                query.append("&offset=").append(queryOffset);
+            }
             if (search != null && !search.isEmpty()) {
                 query.append("&title=ilike.%").append(search).append("%");
             }
-            if (!age.equals("0+")) {
-                query.append("&age_rating_guess=eq.").append(age);
+            if (age != null && !age.equals("all") && !age.equals("0+") && !age.equals("0 ")) {
+                query.append("&age_recommendation=eq.").append(age.replace(" ", "+"));
             }
             if (minScore > 0) {
-                query.append("&estimated_score=gte.").append(minScore);
+                query.append("&composite_score=gte.").append(minScore);
             }
             if (type != null && !type.isEmpty()) {
                 query.append("&media_type=eq.").append(type);
             }
+            // Note: verified filter n'est plus utile car la vue ne contient que des shows vérifiés
             
-            String endpoint = supabaseConfig.getUrl() + "/rest/v1/metadata_estimations" + query;
-            
+            String endpoint = supabaseConfig.getUrl() + "/rest/v1/shows_verified" + query;
             HttpEntity<String> entity = new HttpEntity<>(headers);
             ResponseEntity<List> response = restTemplate.exchange(endpoint, HttpMethod.GET, entity, List.class);
             
-            List<Map<String, Object>> estimations = (List<Map<String, Object>>) response.getBody();
-            if (estimations == null) estimations = new ArrayList<>();
+            List<Map<String, Object>> shows = (List<Map<String, Object>>) response.getBody();
+            if (shows == null) shows = new ArrayList<>();
             
-            // 2. Si on a des estimations, récupérer les scores réels correspondants en batch
-            List<String> tmdbIds = estimations.stream()
-                .map(est -> String.valueOf(est.get("tmdb_id")))
-                .collect(Collectors.toList());
-            
-            Map<String, Map<String, Object>> realScoresMap = new HashMap<>();
-            if (!tmdbIds.isEmpty()) {
-                // Construire la clause IN (malheureusement PostgREST n'accepte pas plus de 5 IDs dans un in? On peut faire une requête par lot de 5, ou alors une requête globale avec?tmdb_id=in.(id1,id2,...)
-                // Simplifions: on fait une requête qui récupère tous les mollo_scores dont le tmdb_id est dans la liste
-                String idsParam = String.join(",", tmdbIds);
-                String scoresEndpoint = supabaseConfig.getUrl() + "/rest/v1/mollo_scores?tmdb_id=in.(" + idsParam + ")";
-                ResponseEntity<List> scoresResponse = restTemplate.exchange(scoresEndpoint, HttpMethod.GET, entity, List.class);
-                List<Map<String, Object>> realScores = (List<Map<String, Object>>) scoresResponse.getBody();
-                if (realScores != null) {
-                    for (Map<String, Object> scoreEntry : realScores) {
-                        String id = String.valueOf(scoreEntry.get("tmdb_id"));
-                        realScoresMap.put(id, scoreEntry);
-                    }
-                }
-            }
-            
-            // 3. Construire la réponse finale (format compatible avec l'interface Show frontend)
+            // Mapper directement au format Show
             List<Map<String, Object>> result = new ArrayList<>();
-            for (Map<String, Object> est : estimations) {
-                Map<String, Object> mappedShow = new HashMap<>();
-                String tmdbIdStr = String.valueOf(est.get("tmdb_id"));
+            for (Map<String, Object> row : shows) {
+                Map<String, Object> mapped = new HashMap<>();
                 
-                // Score: priorité au score réel s'il existe
-                Map<String, Object> realScoreEntry = realScoresMap.get(tmdbIdStr);
-                double compositeScore; // pacing_score
-                boolean isVerified = false;
-                Double averageShotLength = null; // peut être null
-                Integer numScenes = null;
-                Map<String, Object> analysisDetails = null;
-                
-                if (realScoreEntry != null && realScoreEntry.get("real_score") != null) {
-                    Object rs = realScoreEntry.get("real_score");
-                    if (rs instanceof Number) {
-                        compositeScore = ((Number) rs).doubleValue();
-                        isVerified = true;
-                    } else {
-                        compositeScore = 0;
-                    }
-                    
-                    // Extraire les données de scene_details si présent
-                    Object sceneDetailsObj = realScoreEntry.get("scene_details");
-                    if (sceneDetailsObj instanceof Map) {
-                        Map<String, Object> sceneDetails = (Map<String, Object>) sceneDetailsObj;
-                        Object cpm = sceneDetails.get("cuts_per_minute");
-                        if (cpm instanceof Number) {
-                            averageShotLength = 60.0 / ((Number) cpm).doubleValue(); // estimation approximative
-                        }
-                        Object totalCuts = sceneDetails.get("total_cuts");
-                        if (totalCuts instanceof Number) {
-                            numScenes = ((Number) totalCuts).intValue();
-                        }
-                        // On peut aussi passer sceneDetails comme analysis_details
-                        analysisDetails = sceneDetails;
-                    }
-                    
-                    // vidéo URL
-                    if (realScoreEntry.get("video_url") != null) {
-                        mappedShow.put("video_path", realScoreEntry.get("video_url"));
-                    } else {
-                        mappedShow.put("video_path", "Analyse vidéo disponible");
-                    }
-                } else {
-                    // Estimation TMDB
-                    Object es = est.get("estimated_score");
-                    if (es instanceof Number) {
-                        compositeScore = ((Number) es).doubleValue();
-                    } else {
-                        compositeScore = 0;
-                    }
-                    mappedShow.put("video_path", "Estimation TMDB - Pas encore analysée");
-                }
-                
-                // id: on utilise tmdb_id convertible en number (parser)
+                // id: tmdb_id en integer
+                String tmdbIdStr = String.valueOf(row.get("tmdb_id"));
                 try {
-                    mappedShow.put("id", Integer.parseInt(tmdbIdStr));
+                    mapped.put("id", Integer.parseInt(tmdbIdStr));
                 } catch (NumberFormatException e) {
-                    mappedShow.put("id", 0);
+                    mapped.put("id", 0);
                 }
-                
-                // composite_score
-                mappedShow.put("composite_score", compositeScore);
-                
-                // average_shot_length (null si pas d'analyse)
-                mappedShow.put("average_shot_length", averageShotLength);
-                
-                // num_scenes (null si pas d'analyse)
-                mappedShow.put("num_scenes", numScenes);
-                
-                // evaluation_label (calculé)
-                String evalLabel;
-                if (compositeScore >= 60) evalLabel = "LENT";
-                else if (compositeScore >= 45) evalLabel = "BON";
-                else if (compositeScore >= 25) evalLabel = "MODÉRÉ";
-                else evalLabel = "RAPIDE";
-                mappedShow.put("evaluation_label", evalLabel);
-                
-                // evaluation_description (texte libre)
-                mappedShow.put("evaluation_description", "");
-                
-                // evaluation_color (déduit du score)
-                String evalColor;
-                if (compositeScore >= 60) evalColor = "green";
-                else if (compositeScore >= 45) evalColor = "lime";
-                else if (compositeScore >= 25) evalColor = "yellow";
-                else evalColor = "red";
-                mappedShow.put("evaluation_color", evalColor);
-                
-                // age_recommendation (provenance de age_rating_guess)
-                String ageRating = (String) est.get("age_rating_guess");
-                mappedShow.put("age_recommendation", ageRating != null ? ageRating : "0+");
-                
-                // media_type (movie ou tv)
-                Object mediaType = est.get("media_type");
-                if (mediaType != null) {
-                    mappedShow.put("media_type", mediaType.toString());
-                }
+                mapped.put("tmdb_id", tmdbIdStr);
                 
                 // Titre
-                String title = (String) est.get("title");
-                if (title == null || title.isEmpty()) {
-                    Map<String, Object> meta = parseMetadata(est.get("metadata"));
-                    title = meta != null ? (String) meta.get("fr_title") : null;
-                }
-                mappedShow.put("title", title);
+                String title = (String) row.get("title");
+                mapped.put("title", title != null ? title : "");
                 
-                // Description depuis metadata
-                Map<String, Object> meta = parseMetadata(est.get("metadata"));
-                if (meta != null) {
-                    Object desc = meta.get("description");
-                    if (desc != null) mappedShow.put("description", desc);
-                    Object poster = meta.get("poster_path");
-                    if (poster != null) {
-                        String posterPath = poster.toString();
-                        if (posterPath.startsWith("http")) {
-                            mappedShow.put("poster_path", posterPath);
-                        } else {
-                            mappedShow.put("poster_path", "https://image.tmdb.org/t/p/w500" + (posterPath.startsWith("/") ? "" : "/") + posterPath);
-                        }
+                // Poster
+                Object poster = row.get("poster_path");
+                if (poster != null) {
+                    String posterPath = poster.toString();
+                    if (posterPath.startsWith("http")) {
+                        mapped.put("poster_path", posterPath);
+                    } else {
+                        mapped.put("poster_path", "https://image.tmdb.org/t/p/w500" + (posterPath.startsWith("/") ? "" : "/") + posterPath);
                     }
+                } else {
+                    mapped.put("poster_path", "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&q=80");
                 }
                 
-                // Fallback poster si manquant
-                if (!mappedShow.containsKey("poster_path") || mappedShow.get("poster_path") == null) {
-                    mappedShow.put("poster_path", "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&q=80");
+                // Score
+                Object scoreObj = row.get("composite_score");
+                double score = (scoreObj instanceof Number) ? ((Number) scoreObj).doubleValue() : 0;
+                mapped.put("composite_score", score);
+                
+                // Évaluation couleur
+                String color;
+                if (score >= 60) color = "green";
+                else if (score >= 45) color = "lime";
+                else if (score >= 25) color = "yellow";
+                else color = "red";
+                mapped.put("evaluation_color", color);
+                
+                // Label
+                String label;
+                if (score >= 60) label = "LENT";
+                else if (score >= 45) label = "BON";
+                else if (score >= 25) label = "MODÉRÉ";
+                else label = "RAPIDE";
+                mapped.put("evaluation_label", label);
+                mapped.put("evaluation_description", "");
+                
+                // Âge
+                String ageRating = (String) row.get("age_recommendation");
+                mapped.put("age_recommendation", ageRating != null ? ageRating : "0+");
+                
+                // média type
+                Object mediaType = row.get("media_type");
+                if (mediaType != null) {
+                    mapped.put("media_type", mediaType.toString());
                 }
                 
-                // analysis_details (null si pas d'analyse)
-                mappedShow.put("analysis_details", analysisDetails);
+                // Description
+                Object desc = row.get("description");
+                if (desc != null) mapped.put("description", desc.toString());
                 
-                // Nouvelles données vidéo (si disponibles)
-                if (realScoreEntry != null) {
-                    Object vd = realScoreEntry.get("video_duration");
-                    if (vd instanceof Number) {
-                        mappedShow.put("video_duration", ((Number) vd).doubleValue());
+                // Vidéo
+                Object videoUrl = row.get("video_url");
+                if (videoUrl != null) mapped.put("video_path", videoUrl.toString());
+                else mapped.put("video_path", "Analyse vidéo disponible");
+                
+                // Détails analyse
+                Object sceneDetails = row.get("scene_details");
+                if (sceneDetails instanceof Map) {
+                    Map<String, Object> details = (Map<String, Object>) sceneDetails;
+                    Integer numScenes = null;
+                    Double cpm = null;
+                    if (details.get("total_cuts") instanceof Number) {
+                        numScenes = ((Number) details.get("total_cuts")).intValue();
                     }
-                    Object cpm = realScoreEntry.get("cuts_per_minute");
-                    if (cpm instanceof Number) {
-                        mappedShow.put("cuts_per_minute", ((Number) cpm).doubleValue());
+                    if (details.get("cuts_per_minute") instanceof Number) {
+                        cpm = ((Number) details.get("cuts_per_minute")).doubleValue();
                     }
-                    Object mi = realScoreEntry.get("motion_intensity");
-                    if (mi instanceof Number) {
-                        mappedShow.put("motion_intensity", ((Number) mi).doubleValue());
-                    }
-                    Object src = realScoreEntry.get("source");
-                    if (src != null) {
-                        mappedShow.put("source", src.toString());
-                    }
-                    Object vtype = realScoreEntry.get("video_type");
-                    if (vtype != null) {
-                        mappedShow.put("video_type", vtype.toString());
-                    }
+                    mapped.put("num_scenes", numScenes);
+                    mapped.put("cuts_per_minute", cpm);
+                    mapped.put("analysis_details", details);
                 }
                 
-                // Ajouter le tmdb_id pour le front si besoin
-                mappedShow.put("tmdb_id", tmdbIdStr);
+                Object videoDur = row.get("video_duration");
+                if (videoDur instanceof Number) {
+                    mapped.put("video_duration", ((Number) videoDur).doubleValue());
+                }
                 
-                result.add(mappedShow);
+                Object motion = row.get("motion_intensity");
+                if (motion instanceof Number) {
+                    mapped.put("motion_intensity", ((Number) motion).doubleValue());
+                }
+                
+                Object src = row.get("source");
+                if (src != null) {
+                    mapped.put("source", src.toString());
+                }
+                
+                // is_verified toujours true car vue = vérifiés
+                mapped.put("is_verified", true);
+                
+                result.add(mapped);
             }
             
             return ResponseEntity.ok(result);
@@ -312,7 +250,9 @@ public class ShowController {
             @Parameter(in = ParameterIn.QUERY, description = "Nombre d'éléments à retourner", schema = @Schema(type = "number", defaultValue = "10"))
             @RequestParam(defaultValue = "10") int limit,
             @Parameter(in = ParameterIn.QUERY, description = "Filtrer par type de média (movie ou tv)", schema = @Schema(type = "string"))
-            @RequestParam(required = false) String type) {
+            @RequestParam(required = false) String type,
+            @Parameter(in = ParameterIn.QUERY, description = "Offset pour pagination", schema = @Schema(type = "number", defaultValue = "0"))
+            @RequestParam(required = false) Integer offset) {
         
         try {
             HttpHeaders headers = new HttpHeaders();
@@ -320,184 +260,123 @@ public class ShowController {
             headers.set("Authorization", "Bearer " + supabaseConfig.getKey());
             
             StringBuilder query = new StringBuilder("?order=created_at.desc&limit=").append(limit);
+            if (offset != null && offset > 0) {
+                query.append("&offset=").append(offset);
+            }
             if (type != null && !type.isEmpty()) {
                 query.append("&media_type=eq.").append(type);
             }
-            query.append("&select=*");
             
-            String endpoint = supabaseConfig.getUrl() + "/rest/v1/metadata_estimations" + query;
+            String endpoint = supabaseConfig.getUrl() + "/rest/v1/shows_verified" + query;
             HttpEntity<String> entity = new HttpEntity<>(headers);
             ResponseEntity<List> response = restTemplate.exchange(endpoint, HttpMethod.GET, entity, List.class);
             
-            List<Map<String, Object>> estimations = (List<Map<String, Object>>) response.getBody();
-            if (estimations == null) {
-                return ResponseEntity.ok(new ArrayList<>());
-            }
+            List<Map<String, Object>> shows = (List<Map<String, Object>>) response.getBody();
+            if (shows == null) return ResponseEntity.ok(new ArrayList<>());
             
-            // Récupérer les scores réels correspondants (batch)
-            List<String> tmdbIds = estimations.stream()
-                .map(est -> String.valueOf(est.get("tmdb_id")))
-                .collect(Collectors.toList());
-            
-            Map<String, Map<String, Object>> realScoresMap = new HashMap<>();
-            if (!tmdbIds.isEmpty()) {
-                String idsParam = String.join(",", tmdbIds);
-                String scoresEndpoint = supabaseConfig.getUrl() + "/rest/v1/mollo_scores?tmdb_id=in.(" + idsParam + ")";
-                ResponseEntity<List> scoresResponse = restTemplate.exchange(scoresEndpoint, HttpMethod.GET, entity, List.class);
-                List<Map<String, Object>> realScores = (List<Map<String, Object>>) scoresResponse.getBody();
-                if (realScores != null) {
-                    for (Map<String, Object> scoreEntry : realScores) {
-                        String id = String.valueOf(scoreEntry.get("tmdb_id"));
-                        realScoresMap.put(id, scoreEntry);
-                    }
-                }
-            }
-            
-            // Construire la réponse finale (même format que getShows)
+            // Mapper identique à getShows
             List<Map<String, Object>> result = new ArrayList<>();
-            for (Map<String, Object> est : estimations) {
-                Map<String, Object> mappedShow = new HashMap<>();
-                String tmdbIdStr = String.valueOf(est.get("tmdb_id"));
-                Map<String, Object> realScoreEntry = realScoresMap.get(tmdbIdStr);
-                
-                double compositeScore;
-                boolean isVerified = false;
-                Double averageShotLength = null;
-                Integer numScenes = null;
-                Map<String, Object> analysisDetails = null;
-                
-                if (realScoreEntry != null && realScoreEntry.get("real_score") != null) {
-                    Object rs = realScoreEntry.get("real_score");
-                    if (rs instanceof Number) {
-                        compositeScore = ((Number) rs).doubleValue();
-                        isVerified = true;
-                    } else {
-                        compositeScore = 0;
+            for (Map<String, Object> row : shows) {
+                Map<String, Object> mapped = new HashMap<>();
+                String tmdbIdStr = String.valueOf(row.get("tmdb_id"));
+                try { mapped.put("id", Integer.parseInt(tmdbIdStr)); } catch (NumberFormatException e) { mapped.put("id", 0); }
+                mapped.put("tmdb_id", tmdbIdStr);
+                String title = (String) row.get("title");
+                mapped.put("title", title != null ? title : "");
+                Object poster = row.get("poster_path");
+                if (poster != null) {
+                    String posterPath = poster.toString();
+                    if (!posterPath.startsWith("http")) {
+                        posterPath = "https://image.tmdb.org/t/p/w500" + (posterPath.startsWith("/") ? "" : "/") + posterPath;
                     }
-                    
-                    Object sceneDetailsObj = realScoreEntry.get("scene_details");
-                    if (sceneDetailsObj instanceof Map) {
-                        Map<String, Object> sceneDetails = (Map<String, Object>) sceneDetailsObj;
-                        Object cpm = sceneDetails.get("cuts_per_minute");
-                        if (cpm instanceof Number) {
-                            averageShotLength = 60.0 / ((Number) cpm).doubleValue();
-                        }
-                        Object totalCuts = sceneDetails.get("total_cuts");
-                        if (totalCuts instanceof Number) {
-                            numScenes = ((Number) totalCuts).intValue();
-                        }
-                        analysisDetails = sceneDetails;
-                    }
-                    
-                    if (realScoreEntry.get("video_url") != null) {
-                        mappedShow.put("video_path", realScoreEntry.get("video_url"));
-                    } else {
-                        mappedShow.put("video_path", "Analyse vidéo disponible");
-                    }
+                    mapped.put("poster_path", posterPath);
                 } else {
-                    Object es = est.get("estimated_score");
-                    if (es instanceof Number) {
-                        compositeScore = ((Number) es).doubleValue();
-                    } else {
-                        compositeScore = 0;
-                    }
-                    mappedShow.put("video_path", "Estimation TMDB - Pas encore analysée");
+                    mapped.put("poster_path", "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&q=80");
                 }
-                
-                try {
-                    mappedShow.put("id", Integer.parseInt(tmdbIdStr));
-                } catch (NumberFormatException e) {
-                    mappedShow.put("id", 0);
+                Object scoreObj = row.get("composite_score");
+                double score = (scoreObj instanceof Number) ? ((Number) scoreObj).doubleValue() : 0;
+                mapped.put("composite_score", score);
+                String color = score >= 60 ? "green" : score >= 45 ? "lime" : score >= 25 ? "yellow" : "red";
+                mapped.put("evaluation_color", color);
+                String label = score >= 60 ? "LENT" : score >= 45 ? "BON" : score >= 25 ? "MODÉRÉ" : "RAPIDE";
+                mapped.put("evaluation_label", label);
+                mapped.put("evaluation_description", "");
+                String ageRating = (String) row.get("age_recommendation");
+                mapped.put("age_recommendation", ageRating != null ? ageRating : "0+");
+                Object mediaType = row.get("media_type");
+                if (mediaType != null) mapped.put("media_type", mediaType.toString());
+                Object desc = row.get("description");
+                if (desc != null) mapped.put("description", desc.toString());
+                Object videoUrl = row.get("video_url");
+                if (videoUrl != null) mapped.put("video_path", videoUrl.toString());
+                else mapped.put("video_path", "Analyse vidéo disponible");
+                Object sceneDetails = row.get("scene_details");
+                if (sceneDetails instanceof Map) {
+                    Map<String, Object> details = (Map<String, Object>) sceneDetails;
+                    Integer numScenes = null; Double cpm = null;
+                    if (details.get("total_cuts") instanceof Number) numScenes = ((Number) details.get("total_cuts")).intValue();
+                    if (details.get("cuts_per_minute") instanceof Number) cpm = ((Number) details.get("cuts_per_minute")).doubleValue();
+                    mapped.put("num_scenes", numScenes);
+                    mapped.put("cuts_per_minute", cpm);
+                    mapped.put("analysis_details", details);
                 }
+                Object videoDur = row.get("video_duration");
+                if (videoDur instanceof Number) mapped.put("video_duration", ((Number) videoDur).doubleValue());
+                Object motion = row.get("motion_intensity");
+                if (motion instanceof Number) mapped.put("motion_intensity", ((Number) motion).doubleValue());
+                Object src = row.get("source");
+                if (src != null) mapped.put("source", src.toString());
+                mapped.put("is_verified", true);
                 
-                mappedShow.put("composite_score", compositeScore);
-                mappedShow.put("average_shot_length", averageShotLength);
-                mappedShow.put("num_scenes", numScenes);
-                mappedShow.put("analysis_details", analysisDetails);
-                mappedShow.put("is_verified", isVerified);
-                
-                // Évaluation label (avec formule Mollo: score sur 100)
-                String evalLabel;
-                if (compositeScore >= 60) evalLabel = "LENT";
-                else if (compositeScore >= 45) evalLabel = "BON";
-                else if (compositeScore >= 25) evalLabel = "MODÉRÉ";
-                else evalLabel = "RAPIDE";
-                mappedShow.put("evaluation_label", evalLabel);
-                mappedShow.put("evaluation_description", "");
-                
-                String evalColor;
-                if (compositeScore >= 60) evalColor = "green";
-                else if (compositeScore >= 45) evalColor = "lime";
-                else if (compositeScore >= 25) evalColor = "yellow";
-                else evalColor = "red";
-                mappedShow.put("evaluation_color", evalColor);
-                
-                // Âge
-                String ageRating = (String) est.get("age_rating_guess");
-                mappedShow.put("age_recommendation", ageRating != null ? ageRating : "0+");
-                
-                // media_type
-                Object mediaType = est.get("media_type");
-                if (mediaType != null) {
-                    mappedShow.put("media_type", mediaType.toString());
-                }
-                
-                // Titre
-                String title = (String) est.get("title");
-                if (title == null || title.isEmpty()) {
-                    Map<String, Object> meta = parseMetadata(est.get("metadata"));
-                    title = meta != null ? (String) meta.get("fr_title") : null;
-                }
-                mappedShow.put("title", title);
-                
-                // Description
-                Map<String, Object> meta = parseMetadata(est.get("metadata"));
-                if (meta != null) {
-                    Object desc = meta.get("description");
-                    if (desc != null) mappedShow.put("description", desc);
-                    Object poster = meta.get("poster_path");
-                    if (poster != null) {
-                        String posterPath = poster.toString();
-                        if (!posterPath.startsWith("http")) {
-                            posterPath = "https://image.tmdb.org/t/p/w500" + (posterPath.startsWith("/") ? "" : "/") + posterPath;
-                        }
-                        mappedShow.put("poster_path", posterPath);
-                    }
-                }
-                
-                if (!mappedShow.containsKey("poster_path") || mappedShow.get("poster_path") == null) {
-                    mappedShow.put("poster_path", "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&q=80");
-                }
-                
-                mappedShow.put("tmdb_id", tmdbIdStr);
-                
-                // If worker added source/video_type fields in mollo_scores, we could include them:
-                if (realScoreEntry != null) {
-                    Object vd = realScoreEntry.get("video_duration");
-                    if (vd instanceof Number) {
-                        mappedShow.put("video_duration", ((Number) vd).doubleValue());
-                    }
-                    Object cpm = realScoreEntry.get("cuts_per_minute");
-                    if (cpm instanceof Number) {
-                        mappedShow.put("cuts_per_minute", ((Number) cpm).doubleValue());
-                    }
-                    Object mi = realScoreEntry.get("motion_intensity");
-                    if (mi instanceof Number) {
-                        mappedShow.put("motion_intensity", ((Number) mi).doubleValue());
-                    }
-                    Object src = realScoreEntry.get("source");
-                    if (src != null) {
-                        mappedShow.put("source", src.toString());
-                    }
-                    Object vtype = realScoreEntry.get("video_type");
-                    if (vtype != null) {
-                        mappedShow.put("video_type", vtype.toString());
-                    }
-                }
-                
-                result.add(mappedShow);
+                result.add(mapped);
             }
             
+            return ResponseEntity.ok(result);
+            
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+    
+    @Operation(summary = "Compte le nombre de shows avec score réel (analysés vidéo)",
+               description = "Retourne le nombre total de shows qui ont été réellement analysés (présence d'un score dans mollo_scores).",
+               responses = {
+                   @ApiResponse(responseCode = "200", description = "Compte récupéré avec succès",
+                       content = @Content(mediaType = "application/json")),
+                   @ApiResponse(responseCode = "500", description = "Erreur serveur")
+               })
+    @GetMapping("/count/verified")
+    public ResponseEntity<Map<String, Integer>> getVerifiedCount() {
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("apikey", supabaseConfig.getKey());
+            headers.set("Authorization", "Bearer " + supabaseConfig.getKey());
+            headers.set("Prefer", "count=exact");
+            
+            String endpoint = supabaseConfig.getUrl() + "/rest/v1/mollo_scores?select=tmdb_id&limit=1";
+            HttpEntity<String> entity = new HttpEntity<>(headers);
+            ResponseEntity<byte[]> response = restTemplate.exchange(endpoint, HttpMethod.GET, entity, byte[].class);
+            
+            // Header Content-Range: "0-0/671" ou "*/671" -> le total est après le dernier "/"
+            String contentRange = response.getHeaders().getFirst("Content-Range");
+            int totalCount = 0;
+            if (contentRange != null) {
+                int slashIdx = contentRange.lastIndexOf('/');
+                if (slashIdx != -1 && slashIdx + 1 < contentRange.length()) {
+                    String totalStr = contentRange.substring(slashIdx + 1);
+                    // Parfois Supabase retourne "*,*" pour le range quand on ne demande pas de count exact
+                    // Mais avec limit=1 on devrait avoir un nombre
+                    try {
+                        totalCount = Integer.parseInt(totalStr);
+                    } catch (NumberFormatException e) {
+                        // Si on ne peut pas parser, on laisse à 0
+                    }
+                }
+            }
+            
+            Map<String, Integer> result = new HashMap<>();
+            result.put("count", totalCount);
             return ResponseEntity.ok(result);
             
         } catch (Exception e) {

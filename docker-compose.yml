@@ -26,7 +26,6 @@ services:
     build:
       context: ./video-analyzer-service
       dockerfile: Dockerfile
-    container_name: mollo-analyzer
     restart: always
     env_file:
       - ./video-analyzer-service/.env
