@@ -182,6 +182,7 @@ public class SupabaseService {
         metadata.put("certifications", show.getCertifications());
         metadata.put("episode_count", show.getEpisodeCount());
         metadata.put("season_count", show.getSeasonCount());
+        metadata.put("age_rating", show.getAgeRating());
         data.put("metadata", metadata);
 
         HttpHeaders headers = new HttpHeaders();
