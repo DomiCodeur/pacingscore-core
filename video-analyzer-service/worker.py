@@ -237,14 +237,14 @@ def process_task(task: Dict[str, Any]) -> bool:
     try:
         supabase_manager.update_analysis_task_status(task_id, "processing")
         
-        meta = supabase_manager.get_metadata_estimation(tmdb_id)
+        meta = task.get("metadata", {})
         if not meta:
-            raise Exception(f"Impossible de trouver l'estimation pour TMDB ID {tmdb_id}")
+            raise Exception(f"Impossible de trouver les métadonnées dans la tâche {task_id}")
         
-        title = meta.get("title") or meta.get("metadata", {}).get("fr_title", "Série inconnue")
+        title = meta.get("title") or meta.get("fr_title", "Série inconnue")
         logger.info(f"Série: {title}")
         
-        media_type = meta.get("media_type", "tv")
+        media_type = task.get("media_type", "tv")
         episode_info = find_local_video_url_from_estimation(meta.get("metadata", {}))
         if not episode_info:
             if media_type == "movie":

@@ -63,31 +63,9 @@ class SupabaseManager:
     
     def get_metadata_estimation(self, tmdb_id: str) -> Optional[Dict]:
         """
-        Fetch metadata for a given tmdb_id.
-        Priority: analysis_tasks (completed/pending) first, then metadata_estimations (legacy).
-        Returns the complete metadata dict.
+        DEPRECATED: Ne pas utiliser. Les métadonnées sont directement dans la tâche.
+        Gardé pour compatibilité ancien code, mais retourne None.
         """
-        # 1. Chercher dans analysis_tasks (contient metadata JSONB)
-        params = {"tmdb_id": f"eq.{tmdb_id}", "select": "metadata,media_type", "limit": "1"}
-        response = self._request("GET", "analysis_tasks", params=params)
-        if response and response.status_code == 200:
-            data = response.json()
-            if data and len(data) > 0 and data[0].get("metadata"):
-                task = data[0]
-                meta = task["metadata"]
-                if isinstance(meta, dict):
-                    # S'assurer que media_type est présent
-                    if "media_type" not in meta and task.get("media_type"):
-                        meta["media_type"] = task["media_type"]
-                    return meta
-        
-        # 2. Fallback sur metadata_estimations (legacy)
-        params = {"tmdb_id": f"eq.{tmdb_id}", "select": "*", "limit": "1"}
-        response = self._request("GET", "metadata_estimations", params=params)
-        if response and response.status_code == 200:
-            data = response.json()
-            if data and len(data) > 0:
-                return data[0]
         return None
     
     def get_next_pending_task(self) -> Optional[Dict]:
