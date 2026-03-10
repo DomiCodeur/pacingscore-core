@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { AnalysisService, FailedTask } from '../../services/analysis.service';
 import { FormControl } from '@angular/forms';
+import { SupabaseAuthService } from '../../services/supabase-auth.service';
 
 @Component({
   selector: 'app-admin-dashboard',
@@ -8,12 +9,23 @@ import { FormControl } from '@angular/forms';
     <div class="min-h-screen bg-gray-50 p-6">
       <div class="max-w-6xl mx-auto">
         <!-- Header -->
-        <div class="bg-white rounded-2xl shadow-sm p-6 mb-6 border border-gray-100">
-          <h1 class="text-2xl font-bold text-gray-900 flex items-center gap-3">
-            <span class="text-3xl">🔧</span>
-            Administration - Tâches échouées
-          </h1>
-          <p class="text-gray-500 mt-2">Inspectez et relancez les analyses qui ont échoué</p>
+        <div class="bg-white rounded-2xl shadow-sm p-6 mb-6 border border-gray-100 flex items-center justify-between">
+          <div>
+            <h1 class="text-2xl font-bold text-gray-900 flex items-center gap-3">
+              <span class="text-3xl">🔧</span>
+              Administration - Tâches échouées
+            </h1>
+            <p class="text-gray-500 mt-2">Inspectez et relancez les analyses qui ont échoué</p>
+          </div>
+          <div class="flex items-center gap-4">
+            <div class="text-right text-sm text-gray-600">
+              Connecté en tant que<br>
+              <span class="font-semibold text-gray-900">{{ userEmail }}</span>
+            </div>
+            <button (click)="signOut()" class="px-4 py-2 bg-gray-600 text-white rounded-lg text-sm font-semibold hover:bg-gray-700 transition-colors">
+              Déconnexion
+            </button>
+          </div>
         </div>
 
         <!-- Loading -->
@@ -104,11 +116,24 @@ export class AdminDashboardComponent implements OnInit {
   failedTasks: FailedTask[] = [];
   loading = false;
   retrying: string | null = null;
+  userEmail: string = '...';
 
-  constructor(private analysisService: AnalysisService) {}
+  constructor(
+    private analysisService: AnalysisService,
+    private auth: SupabaseAuthService
+  ) {
+    this.auth.email$.subscribe(email => this.userEmail = email || 'inconnu');
+  }
 
   ngOnInit(): void {
     this.loadFailedTasks();
+  }
+
+  signOut(): void {
+    this.auth.signOut().then(() => {
+      // Optionnel : redirection vers home
+      window.location.href = '/home';
+    });
   }
 
   loadFailedTasks(): void {

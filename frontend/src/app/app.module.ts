@@ -8,15 +8,18 @@ import { RouterModule } from '@angular/router';
 import { AppComponent } from './app.component';
 import { YukaDashboardComponent } from './components/yuka-dashboard/yuka-dashboard.component';
 import { AdminDashboardComponent } from './components/admin-dashboard/admin-dashboard.component';
+import { AuthLoginComponent } from './auth-login.component';
 import { SpringBootService } from './services/spring-boot.service';
 import { AnalysisService } from './services/analysis.service';
+import { SupabaseAuthService } from './services/supabase-auth.service';
 import { AppRoutingModule } from './app-routing.module';
 
 @NgModule({
   declarations: [
     AppComponent,
     YukaDashboardComponent,
-    AdminDashboardComponent
+    AdminDashboardComponent,
+    AuthLoginComponent
   ],
   imports: [
     BrowserModule,
@@ -27,7 +30,8 @@ import { AppRoutingModule } from './app-routing.module';
   ],
   providers: [
     SpringBootService,
-    AnalysisService
+    AnalysisService,
+    SupabaseAuthService
   ],
   bootstrap: [AppComponent]
 })

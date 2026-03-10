@@ -6,41 +6,6 @@ import { SpringBootService, Show } from '../../services/spring-boot.service';
 @Component({
   selector: 'app-yuka-dashboard',
   template: `
-    <!-- Header -->
-    <header class="bg-white border-b border-gray-200 sticky top-0 z-50">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex items-center justify-between h-16 gap-6 flex-wrap">
-          <!-- Logo -->
-          <a href="#" class="flex items-center gap-3 text-decoration-none">
-            <div class="w-11 h-11 bg-green-500 rounded-xl flex items-center justify-center text-white font-bold text-xl">
-              🎬
-            </div>
-            <div>
-              <h1 class="text-lg font-bold text-gray-900 leading-tight">Mollo</h1>
-              <p class="text-xs text-gray-500 font-medium">Le score des dessins animés</p>
-            </div>
-          </a>
-
-          <!-- Search Bar -->
-          <div class="flex-1 max-w-xl">
-            <div class="relative">
-              <span class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                </svg>
-              </span>
-              <input 
-                [formControl]="searchControl"
-                type="text"
-                placeholder="Rechercher un dessin animé..."
-                class="w-full pl-12 pr-4 py-3 bg-gray-100 border-2 border-transparent rounded-xl focus:bg-white focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none transition-all duration-200 text-gray-900 placeholder-gray-400"
-              >
-            </div>
-          </div>
-        </div>
-      </div>
-    </header>
-
     <!-- Hero Section -->
     <section class="bg-gradient-to-b from-green-50 to-white py-12 md:py-16">
       <div class="max-w-4xl mx-auto px-4 text-center">
@@ -126,6 +91,19 @@ import { SpringBootService, Show } from '../../services/spring-boot.service';
               {{ type.label }}
             </button>
           </div>
+
+          <!-- Tranche d'âge développementale -->
+          <div class="flex flex-wrap gap-2 justify-center">
+            <span class="w-full text-center text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Tranche d'âge</span>
+            <button 
+              *ngFor="let dage of developmentalAgeFilters"
+              (click)="applyDevelopmentalAgeFilter(dage.id)"
+              [ngClass]="activeDevelopmentalAgeFilter === dage.id ? 'bg-indigo-500 text-white border-indigo-500 shadow-md' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'"
+              class="px-4 py-2 rounded-full text-sm font-semibold border-2 transition-all duration-200"
+            >
+              {{ dage.label }}
+            </button>
+          </div>
         </div>
 
         <!-- Results Header -->
@@ -191,8 +169,9 @@ import { SpringBootService, Show } from '../../services/spring-boot.service';
                 <h4 class="font-bold text-gray-900 text-sm mb-1 line-clamp-1">
                   {{ show.title }}
                 </h4>
-                <div class="flex items-center gap-2 mb-2">
+                <div class="flex items-center gap-2 mb-2 flex-wrap">
                    <span class="px-1.5 py-0.5 bg-gray-100 rounded text-[10px] font-bold text-gray-500">{{ show.age_recommendation || '0+' }}</span>
+                   <span *ngIf="show.target_developmental_age" class="px-1.5 py-0.5 bg-blue-100 rounded text-[10px] font-bold text-blue-600">{{ show.target_developmental_age }}</span>
                    <span class="text-[10px] text-gray-400">⏱️ {{ show.average_shot_length || '?' }}s</span>
                 </div>
                 <div class="h-1 rounded-full overflow-hidden bg-gray-100">
@@ -245,6 +224,10 @@ import { SpringBootService, Show } from '../../services/spring-boot.service';
                       <div class="text-xs font-bold text-gray-400 uppercase mb-1">Moyenne Plan</div>
                       <div class="text-xl font-black text-gray-900">{{ selectedShow.average_shot_length || '?' }}s</div>
                   </div>
+                  <div class="bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                      <div class="text-xs font-bold text-gray-400 uppercase mb-1">Tranche d'âge développementale</div>
+                      <div class="text-xl font-black text-gray-900">{{ selectedShow.target_developmental_age || 'Non spécifiée' }}</div>
+                  </div>
               </div>
               <button (click)="closeModal()" class="w-full py-4 bg-gray-900 text-white rounded-2xl font-bold hover:bg-gray-800 transition-colors shadow-lg">
                 Fermer
@@ -261,10 +244,7 @@ import { SpringBootService, Show } from '../../services/spring-boot.service';
       </div>
     </footer>
   `,
-  styles: [`
-    :host { display: block; background: #fafafa; min-h: 100vh; }
-    .line-clamp-1 { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
-  `]
+  styles: [`\n    :host { display: block; background: #fafafa; min-height: 100vh; }\n    .line-clamp-1 { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }\n  `]
 })
 export class YukaDashboardComponent implements OnInit {
   shows: Show[] = [];
@@ -295,6 +275,16 @@ export class YukaDashboardComponent implements OnInit {
     { id: '10+', label: '10+' }
   ];
   activeAgeFilter = 'all';
+
+  // Filtres de tranche d'âge développementale (0-2 ans, 3-5 ans, etc.)
+  developmentalAgeFilters = [
+    { id: 'all', label: 'Toutes tranches' },
+    { id: '0-2 ans', label: '0-2 ans' },
+    { id: '3-5 ans', label: '3-5 ans' },
+    { id: '6-8 ans', label: '6-8 ans' },
+    { id: '9-10 ans', label: '9-10 ans' }
+  ];
+  activeDevelopmentalAgeFilter = 'all';
 
   typeFilters = [
     { id: 'all', label: 'Tous' },
@@ -327,6 +317,7 @@ export class YukaDashboardComponent implements OnInit {
       switchMap((term) => {
         this.resetPagination();
         this.loading = true;
+        const targetAge = this.activeDevelopmentalAgeFilter === 'all' ? undefined : this.activeDevelopmentalAgeFilter;
         if (term) {
           // Recherche : on utilise getAllShowsPaginated avec le terme de recherche
           return this.springBootService.getAllShowsPaginated(
@@ -336,7 +327,8 @@ export class YukaDashboardComponent implements OnInit {
             0,
             term,
             this.activeTypeFilter === 'all' ? undefined : this.activeTypeFilter,
-            true // verified only
+            true, // verified only
+            targetAge
           );
         } else {
           return this.springBootService.getAllShowsPaginated(
@@ -346,7 +338,8 @@ export class YukaDashboardComponent implements OnInit {
             0,
             undefined,
             this.activeTypeFilter === 'all' ? undefined : this.activeTypeFilter,
-            true // verified only
+            true, // verified only
+            targetAge
           );
         }
       }),
@@ -388,6 +381,7 @@ export class YukaDashboardComponent implements OnInit {
       this.loadingMore = true;
     }
     const age = this.activeAgeFilter;
+    const targetAge = this.activeDevelopmentalAgeFilter === 'all' ? undefined : this.activeDevelopmentalAgeFilter;
     this.springBootService.getAllShowsPaginated(
       this.pageSize,
       page * this.pageSize,
@@ -395,7 +389,8 @@ export class YukaDashboardComponent implements OnInit {
       0, // minScore non filtré ici
       undefined,
       this.activeTypeFilter === 'all' ? undefined : this.activeTypeFilter,
-      true // verified only
+      true, // verified only
+      targetAge
     ).subscribe({
       next: (newShows) => {
         if (page === 0) {
@@ -471,6 +466,11 @@ export class YukaDashboardComponent implements OnInit {
     this.applyAllFilters();
   }
 
+  applyDevelopmentalAgeFilter(dageId: string) {
+    this.activeDevelopmentalAgeFilter = dageId;
+    this.applyAllFilters();
+  }
+
   applyFilter(filter: any) {
     this.activeFilter = filter.id;
     this.applyAllFilters();
@@ -498,6 +498,11 @@ export class YukaDashboardComponent implements OnInit {
     // Filtrage par type
     if (this.activeTypeFilter !== 'all') {
       results = results.filter(s => s.media_type === this.activeTypeFilter);
+    }
+
+    // Filtrage par tranche d'âge développementale
+    if (this.activeDevelopmentalAgeFilter !== 'all') {
+      results = results.filter(s => s.target_developmental_age === this.activeDevelopmentalAgeFilter);
     }
 
     this.filteredShows = results;

@@ -26,13 +26,15 @@ export class YouTubeService {
   /**
    * Récupérer toutes les séries depuis la base Supabase
    */
-  getShows(age: string = '0+', minScore: number = 0): Observable<ShowInfo[]> {
-    return this.http.get<ShowInfo[]>(`${this.apiShowsUrl}`, {
-      params: {
-        age: age,
-        minScore: minScore.toString()
-      }
-    });
+  getShows(age: string = '0+', targetAge?: string, minScore: number = 0): Observable<ShowInfo[]> {
+    const params: any = {
+      age: age,
+      minScore: minScore.toString()
+    };
+    if (targetAge) {
+      params.targetAge = targetAge;
+    }
+    return this.http.get<ShowInfo[]>(`${this.apiShowsUrl}`, { params });
   }
 
   /**

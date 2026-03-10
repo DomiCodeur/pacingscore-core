@@ -15,6 +15,7 @@ export interface Show {
   evaluation_description: string;
   evaluation_color: 'green' | 'lime' | 'yellow' | 'red';
   age_recommendation: string;
+  target_developmental_age?: string; // e.g., "0-2 ans", "3-5 ans", "6-8 ans", "9-10 ans"
   description: string;
   analysis_details: any | null;
   video_path: string;
@@ -53,10 +54,11 @@ export class SpringBootService {
    * @param age filtre d'âge (défaut "0+")
    * @param minScore score minimum
    * @param search recherche textuelle
-   * @param type type de média (movie/tv)
+   * @param type filtre par type de média (movie/tv)
    * @param verified si true, ne retourne que les shows avec score réel (analysés)
+   * @param targetAge filtre par tranche d'âge développementale (ex: "0-2 ans", "3-5 ans", "6-8 ans", "9-10 ans")
    */
-  getAllShowsPaginated(limit: number, offset: number, age: string = 'all', minScore: number = 0, search?: string, type?: string, verified?: boolean): Observable<Show[]> {
+  getAllShowsPaginated(limit: number, offset: number, age: string = 'all', minScore: number = 0, search?: string, type?: string, verified?: boolean, targetAge?: string): Observable<Show[]> {
     let url = `${this.apiUrl}/shows?limit=${limit}&offset=${offset}&minScore=${minScore}`;
     if (age && age !== 'all') {
       url += `&age=${encodeURIComponent(age)}`;
@@ -69,6 +71,9 @@ export class SpringBootService {
     }
     if (verified) {
       url += `&verified=true`;
+    }
+    if (targetAge) {
+      url += `&targetAge=${encodeURIComponent(targetAge)}`;
     }
     return this.http.get<Show[]>(url);
   }

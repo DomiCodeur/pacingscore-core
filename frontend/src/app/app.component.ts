@@ -1,4 +1,8 @@
 import { Component } from '@angular/core';
+import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
+import { SupabaseAuthService } from './services/supabase-auth.service';
+import { Router } from '@angular/router';
 
 @Component({
   selector: 'app-root',
@@ -27,12 +31,27 @@ import { Component } from '@angular/core';
                   Dashboard
                 </a>
                 <a 
+                  *ngIf="isAdmin$ | async"
                   routerLink="/admin" 
                   routerLinkActive="bg-blue-100 text-blue-700"
                   class="px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
                 >
                   Admin
                 </a>
+                <a 
+                  *ngIf="!(isLoggedIn$ | async)" 
+                  routerLink="/login"
+                  class="px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                  Connexion
+                </a>
+                <button 
+                  *ngIf="(isLoggedIn$ | async)" 
+                  (click)="signOut()" 
+                  class="px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                  Déconnexion
+                </button>
               </div>
             </div>
           </div>
@@ -48,4 +67,20 @@ import { Component } from '@angular/core';
 })
 export class AppComponent {
   title = 'Mollo - Le Yuka des Dessins Animés';
+  isAdmin$: Observable<boolean>;
+  isLoggedIn$: Observable<boolean>;
+
+  constructor(
+    private auth: SupabaseAuthService,
+    private router: Router
+  ) {
+    this.isAdmin$ = this.auth.isAdmin$;
+    this.isLoggedIn$ = this.auth.user$.pipe(map(user => !!user));
+  }
+
+  signOut(): void {
+    this.auth.signOut().then(() => {
+      this.router.navigate(['/home']);
+    });
+  }
 }

@@ -9,6 +9,8 @@ export interface FailedTask {
   error_message?: string;
   created_at?: string;
   metadata?: any;
+  manualUrl?: string;
+  _removing?: boolean;
 }
 
 export interface RetryResult {
@@ -39,7 +41,7 @@ export class AnalysisService {
     // Construire l'URL avec paramètres de requête
     const firstParam = Object.keys(params).length > 0 ? '?' : '';
     const queryString = Object.entries(params)
-      .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
+      .map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`)
       .join('&');
     url = queryString ? url + firstParam + queryString : url;
 
