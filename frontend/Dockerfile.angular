@@ -1,17 +1,44 @@
 # Étape 1 : Build de l'application Angular
 FROM node:20-alpine AS build
 WORKDIR /app
+
+# Accepte les secrets comme ARG (à passer via docker/buildkit)
+ARG SUPABASE_URL
+ARG SUPABASE_KEY
+ARG TMDB_API_KEY
+ARG API_URL
+ARG NODE_ENV=production
+
+# Copie les dépendances
 COPY package*.json ./
-RUN npm install --legacy-peer-deps
+# Installe les dépendances (dev comprises)
+ENV NODE_ENV=development
+RUN npm ci --legacy-peer-deps
+# S'assure que Angular CLI est disponible
+RUN npm install --no-save --legacy-peer-deps @angular/cli@^18.0.0
+
+# Copie tout le code source frontend
 COPY . .
-RUN npm run build -- --configuration production
+
+# Génère les environments à partir des ARG
+RUN cat > src/environments/environment.ts << EOF
+export const environment = {
+  production: false,
+  tmdbApiKey: '${TMDB_API_KEY}',
+  supabaseUrl: '${SUPABASE_URL}',
+  supabaseAnonKey: '${SUPABASE_KEY}',
+  apiUrl: '${API_URL}'
+};
+EOF
+RUN cp src/environments/environment.ts src/environments/environment.prod.ts
+
+# Build de production
+RUN npm list @angular/cli && npm run build -- --configuration production
 
 # Étape 2 : Serveur Nginx
 FROM nginx:alpine
-# On copie tout le dossier dist complet
 COPY --from=build /app/dist /usr/share/nginx/html
-# On utilise un script shell simple pour tout remonter à la racine si besoin
 RUN cd /usr/share/nginx/html && (mv */* . 2>/dev/null || true) && (mv */* . 2>/dev/null || true)
-COPY ./nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
