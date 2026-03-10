@@ -1,0 +1,18 @@
+# Dépendances (C'est lui le coupable de 500 MB !)
+node_modules/
+npm-debug.log
+
+# Dossiers de build locaux
+dist/
+.angular/
+out/
+
+# Fichiers Git et configuration IDE
+.git/
+.gitignore
+.vscode/
+.idea/
+
+# Tests et logs
+coverage/
+*.log
