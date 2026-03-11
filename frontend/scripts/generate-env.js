@@ -9,7 +9,7 @@ const env = {
   production: process.env.NODE_ENV === 'production',
   tmdbApiKey: process.env.TMDB_API_KEY || '',
   supabaseUrl: process.env.SUPABASE_URL || '',
-  supabaseAnonKey: process.env.SUPABASE_KEY || '',
+  supabaseAnonKey: process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY || '',
   apiUrl: process.env.API_URL || 'http://localhost:8080'
 };
 
