@@ -1,0 +1,49 @@
+# Exclure les dépendances et builds locaux
+node_modules/
+frontend/node_modules/
+.angular/
+frontend/.angular/
+dist/
+frontend/dist/
+backend/target/
+video-analyzer-service/venv/
+__pycache__/
+*.pyc
+
+# Fichiers de configuration et secrets
+.env
+.env.*
+!.env.example
+
+# Git
+.git/
+.gitignore
+
+# Logs
+*.log
+
+# IDE
+.idea/
+.vscode/
+
+# Dossiers temporaires
+.tmp/
+temp/
+tmp/
+
+# Fichiers de données locaux
+*.mp4
+*.mkv
+*.mov
+*.avi
+analysis_results.json
+
+# OpenClaw workspace
+.openclaw/
+memory/
+HEARTBEAT.md
+AGENTS.md
+SOUL.md
+TOOLS.md
+USER.md
+IDENTITY.md

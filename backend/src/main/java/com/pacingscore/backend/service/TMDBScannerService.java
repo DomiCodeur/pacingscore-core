@@ -271,15 +271,16 @@ public class TMDBScannerService {
      * Lance un import massif diversifié (Séries Enfants, Films d'animation, et Médias plus âgés)
      */
     public String performMassiveImport() {
-        // 1. Séries Enfants (0-6 ans) - pages 1 à 20
-        scanChildrenAnimations(false, 20); 
+        // 1. Séries Enfants (0-6 ans) - pages 1 à 200
+        scanChildrenAnimations(false, 200); 
         
-        // 2. Films d'animation (Grand public) - pages 1 à 25
-        scanMovies(false, 25);
+        // 2. Films d'animation (Grand public) - pages 1 à 200
+        scanMovies(false, 200);
 
-        // 3. Séries d'animation variées (pré-ados/ados) - pages 1 à 15
+        // 3. Séries d'animation variées (pré-ados/ados) - pages 1 à 150
+        // On fait deux variantes : genre=16 (Animation pure) et genre=16+10759 (Animation+Action)
         try {
-            for (int page = 1; page <= 15; page++) {
+            for (int page = 1; page <= 150; page++) {
                 scanGenreSpecific("tv", "16", page); // Animation seule
                 scanGenreSpecific("tv", "16,10759", page); // Animation + Action/Adventure
             }

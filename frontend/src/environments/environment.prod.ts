@@ -1,7 +1,7 @@
 export const environment = {
-  production: true,
-  apiUrl: '/api',
-  supabaseUrl: '',
-  supabaseAnonKey: '',
-  tmdbApiKey: ''
+  "production": false,
+  "tmdbApiKey": "",
+  "supabaseUrl": "",
+  "supabaseAnonKey": "",
+  "apiUrl": "http://localhost:8080"
 };

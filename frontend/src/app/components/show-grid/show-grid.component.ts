@@ -1,180 +1,119 @@
 import { Component, OnInit } from '@angular/core';
-import { FormControl } from '@angular/forms';
-import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
-import { SupabaseService } from '../../services/supabase.service';
-
-interface Show {
-  id: string;
-  video_path: string;
-  pacing_score: number;
-  cuts_per_minute: number;
-  metadata: {
-    age: string;
-    style: string;
-    poster?: string;
-  };
-}
+import { SpringBootService, Show } from '../../services/spring-boot.service';
 
 @Component({
   selector: 'app-show-grid',
   template: `
     <div class="container mx-auto px-4 py-8">
-      <!-- Hero Section -->
-      <div class="mb-12 text-center">
-        <h1 class="text-4xl font-bold mb-4 text-gray-800">PacingScore Kids</h1>
-        <p class="text-xl text-gray-600">Le "Yuka" des dessins animés pour vos enfants</p>
+      <div class="mb-8">
+        <h2 class="text-2xl font-bold text-gray-800 mb-2">Galerie des dessins animés analysés</h2>
+        <p class="text-gray-600">Données issues de la vue shows_verified (TMDB + analyse vidéo)</p>
       </div>
 
-      <!-- Search Bar -->
-      <div class="relative max-w-2xl mx-auto mb-12">
-        <input 
-          [formControl]="searchControl"
-          type="text" 
-          placeholder="Rechercher un dessin animé..." 
-          class="w-full px-6 py-4 text-lg rounded-full border-2 border-purple-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all"
-        >
-        <span class="absolute right-6 top-1/2 transform -translate-y-1/2 text-gray-400">
-          🔍
-        </span>
+      <!-- Loading -->
+      <div *ngIf="loading" class="flex justify-center py-20">
+        <div class="animate-spin rounded-full h-12 w-12 border-4 border-green-500 border-t-transparent"></div>
       </div>
 
-      <!-- Featured Shows Grid -->
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-12" *ngIf="!searchResults.length">
-        <div *ngFor="let show of featuredShows" 
-             class="show-card group relative rounded-xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300">
-          <!-- Poster Image -->
-          <div class="aspect-[2/3] w-full bg-gray-200 relative overflow-hidden">
-            <img 
-              [src]="show.metadata?.poster || getDefaultPoster(show.video_path)"
-              [alt]="show.video_path"
-              class="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-300"
-            >
-            <!-- Score Badge -->
-            <div class="absolute top-4 right-4 w-16 h-16 rounded-full flex items-center justify-center"
-                 [ngClass]="getScoreClass(show.pacing_score)">
-              <span class="text-xl font-bold">{{ show.pacing_score }}%</span>
-            </div>
-            <!-- Age Badge -->
-            <div class="absolute top-4 left-4 px-3 py-1 rounded-full text-sm font-semibold"
-                 [ngClass]="getAgeClass(show.metadata?.age)">
-              {{ show.metadata?.age }}
-            </div>
-          </div>
-          <!-- Info Section -->
-          <div class="p-4 bg-white">
-            <h3 class="text-lg font-semibold mb-2">{{ show.video_path }}</h3>
-            <p class="text-sm text-gray-600">{{ show.metadata?.style }}</p>
-          </div>
-        </div>
-      </div>
+      <!-- Grid -->
+      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5" *ngIf="!loading">
+        <div *ngFor="let show of shows" class="group cursor-pointer">
+          <div class="relative rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
+            <div class="aspect-[2/3] bg-gradient-to-br from-gray-100 to-gray-200 relative overflow-hidden">
+              <!-- Badge score -->
+              <div class="absolute top-2 left-2 flex flex-col gap-1 z-10">
+                <div class="px-2.5 py-1 rounded-lg text-white text-[10px] font-black shadow-lg"
+                     [style.background]="getScoreBg(show.composite_score)">
+                  {{ show.composite_score }}
+                </div>
+                <div *ngIf="show.video_type" class="px-1.5 py-0.5 rounded text-[9px] font-semibold text-gray-700 bg-white/90 backdrop-blur shadow-sm self-start">
+                  {{ getVideoTypeLabel(show.video_type) }}
+                </div>
+              </div>
 
-      <!-- Search Results -->
-      <div class="flex flex-col space-y-4" *ngIf="searchResults.length">
-        <div *ngFor="let show of searchResults" 
-             class="flex bg-white rounded-xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300">
-          <!-- Left: Poster -->
-          <div class="w-48 bg-gray-200 relative">
-            <img 
-              [src]="show.metadata?.poster || getDefaultPoster(show.video_path)"
-              [alt]="show.video_path"
-              class="w-full h-full object-cover"
-            >
-          </div>
-          <!-- Right: Info -->
-          <div class="flex-1 p-6 flex justify-between items-center">
-            <div>
-              <h3 class="text-xl font-semibold mb-2">{{ show.video_path }}</h3>
-              <div class="flex items-center space-x-4">
-                <span class="px-3 py-1 rounded-full text-sm font-semibold"
-                      [ngClass]="getAgeClass(show.metadata?.age)">
-                  {{ show.metadata?.age }}
-                </span>
-                <span class="text-gray-600">{{ show.metadata?.style }}</span>
+              <!-- Poster -->
+              <img *ngIf="show.poster_path && !show.poster_path.includes('assets/')"
+                   [src]="show.poster_path"
+                   [alt]="show.title"
+                   class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                   loading="lazy">
+              <div *ngIf="!show.poster_path || show.poster_path.includes('assets/')"
+                   class="w-full h-full flex flex-col items-center justify-center p-4 bg-gray-100">
+                <div class="text-3xl mb-2">🎬</div>
+                <div class="text-xs font-bold text-gray-400 text-center uppercase tracking-tighter">{{ show.title }}</div>
               </div>
             </div>
-            <!-- Score Circle -->
-            <div class="w-24 h-24 rounded-full flex items-center justify-center mr-6"
-                 [ngClass]="getScoreClass(show.pacing_score)">
-              <span class="text-2xl font-bold">{{ show.pacing_score }}%</span>
+
+            <!-- Info -->
+            <div class="p-3 bg-white border-t border-gray-50">
+              <h4 class="font-bold text-gray-900 text-sm mb-1 line-clamp-1">{{ show.title }}</h4>
+              <div class="flex items-center gap-2 mb-2 flex-wrap">
+                <span class="px-1.5 py-0.5 bg-gray-100 rounded text-[10px] font-bold text-gray-500">{{ show.age_recommendation || '0+' }}</span>
+                <span *ngIf="show.target_developmental_age" class="px-1.5 py-0.5 bg-blue-100 rounded text-[10px] font-bold text-blue-600">{{ show.target_developmental_age }}</span>
+                <span class="text-[10px] text-gray-400">⏱️ {{ show.average_shot_length || '?' }}s</span>
+              </div>
+              <div class="h-1 rounded-full overflow-hidden bg-gray-100">
+                <div class="h-full" [style.width]="show.composite_score + '%'" [style.background]="getScoreBg(show.composite_score)"></div>
+              </div>
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- No results -->
+      <div *ngIf="!loading && shows.length === 0" class="text-center py-20">
+        <div class="text-6xl mb-4">🔍</div>
+        <h3 class="text-xl font-semibold text-gray-900 mb-2">Aucun résultat</h3>
+        <p class="text-gray-500">Aucun dessin animé analysé pour le moment.</p>
       </div>
     </div>
   `,
   styles: [`
-    .show-card:hover {
-      transform: translateY(-4px);
-    }
+    :host { display: block; background: #fafafa; min-height: 100vh; }
+    .line-clamp-1 { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
   `]
 })
 export class ShowGridComponent implements OnInit {
-  searchControl = new FormControl('');
-  searchResults: Show[] = [];
-  featuredShows: Show[] = [];
+  shows: Show[] = [];
+  loading = false;
 
-  constructor(private supabase: SupabaseService) {}
+  constructor(private springBootService: SpringBootService) {}
 
   ngOnInit() {
-    // Load featured shows
-    this.loadFeaturedShows();
+    this.loadShows();
+  }
 
-    // Setup search
-    this.searchControl.valueChanges.pipe(
-      debounceTime(300),
-      distinctUntilChanged()
-    ).subscribe(term => {
-      if (term) {
-        this.searchShows(term);
-      } else {
-        this.searchResults = [];
+  loadShows(): void {
+    this.loading = true;
+    this.springBootService.getAllShows().subscribe({
+      next: (shows) => {
+        this.shows = shows;
+        this.loading = false;
+      },
+      error: (err) => {
+        console.error('Erreur chargement grille', err);
+        this.loading = false;
+        this.shows = [];
       }
     });
   }
 
-  async loadFeaturedShows() {
-    const { data, error } = await this.supabase.client
-      .from('video_analyses')
-      .select('*')
-      .limit(8);
-
-    if (data) {
-      this.featuredShows = data;
-    }
+  getScoreBg(score: number): string {
+    if (score >= 80) return '#22c55e'; // green-500
+    if (score >= 60) return '#84cc16'; // lime-500
+    if (score >= 40) return '#f59e0b'; // amber-500
+    return '#ef4444'; // red-500
   }
 
-  async searchShows(term: string) {
-    const { data, error } = await this.supabase.client
-      .from('video_analyses')
-      .select('*')
-      .ilike('video_path', `%${term}%`);
-
-    if (data) {
-      this.searchResults = data;
-    }
-  }
-
-  getScoreClass(score: number): string {
-    if (score >= 90) return 'bg-green-500 text-white';
-    if (score >= 70) return 'bg-lime-500 text-white';
-    if (score >= 50) return 'bg-yellow-500 text-white';
-    if (score >= 30) return 'bg-orange-500 text-white';
-    return 'bg-red-500 text-white';
-  }
-
-  getAgeClass(age: string): string {
-    switch(age) {
-      case '0+': return 'bg-green-100 text-green-800';
-      case '3+': return 'bg-blue-100 text-blue-800';
-      case '6+': return 'bg-yellow-100 text-yellow-800';
-      case '10+': return 'bg-orange-100 text-orange-800';
-      case '14+': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  }
-
-  getDefaultPoster(title: string): string {
-    // On utilisera un service d'images plus tard
-    return `https://ui-avatars.com/api/?name=${encodeURIComponent(title)}&size=400&background=random`;
+  getVideoTypeLabel(type: string): string {
+    const labels: {[key: string]: string} = {
+      'episode': 'Épisode',
+      'film': 'Film',
+      'movie': 'Film',
+      'extrait': 'Extrait',
+      'trailer': 'Bande-annonce',
+      'full': 'Complet'
+    };
+    return labels[type] || type;
   }
 }

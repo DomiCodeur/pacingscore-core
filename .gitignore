@@ -96,3 +96,6 @@ backend/src/main/resources/db/
 
 # Node modules
 frontend/node_modules/
+
+.vercel
+*.jar

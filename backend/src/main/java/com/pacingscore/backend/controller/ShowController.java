@@ -73,6 +73,8 @@ public class ShowController {
     public ResponseEntity<List<Map<String, Object>>> getShows(
             @Parameter(in = ParameterIn.QUERY, description = "Tranche d'âge recommandée (ex: 0+, 3+, 6+, 10+, 16+)", schema = @Schema(type = "string", defaultValue = "0+"))
             @RequestParam(defaultValue = "0+") String age,
+            @Parameter(in = ParameterIn.QUERY, description = "Classification développementale (0-2 ans, 3-5 ans)")
+            @RequestParam(required = false) String targetAge,
             @Parameter(in = ParameterIn.QUERY, description = "Score minimum de rythme (0-100)", schema = @Schema(type = "number", defaultValue = "0"))
             @RequestParam(defaultValue = "0") double minScore,
             @Parameter(in = ParameterIn.QUERY, description = "Filtrer par titre (recherche partielle)", schema = @Schema(type = "string"))
@@ -104,6 +106,9 @@ public class ShowController {
             }
             if (age != null && !age.equals("all") && !age.equals("0+") && !age.equals("0 ")) {
                 query.append("&age_recommendation=eq.").append(age.replace(" ", "+"));
+            }
+            if (targetAge != null && !targetAge.isEmpty()) {
+                query.append("&target_developmental_age=eq.").append(targetAge);
             }
             if (minScore > 0) {
                 query.append("&composite_score=gte.").append(minScore);
@@ -173,9 +178,13 @@ public class ShowController {
                 mapped.put("evaluation_label", label);
                 mapped.put("evaluation_description", "");
                 
-                // Âge
+                // Âge recommandé (métadonnée originale)
                 String ageRating = (String) row.get("age_recommendation");
                 mapped.put("age_recommendation", ageRating != null ? ageRating : "0+");
+                
+                // Classification développementale (0-2 ans, 3-5 ans)
+                String developmentalAge = (String) row.get("target_developmental_age");
+                mapped.put("target_developmental_age", developmentalAge != null ? developmentalAge : null);
                 
                 // média type
                 Object mediaType = row.get("media_type");
@@ -354,23 +363,22 @@ public class ShowController {
             headers.set("Authorization", "Bearer " + supabaseConfig.getKey());
             headers.set("Prefer", "count=exact");
             
-            String endpoint = supabaseConfig.getUrl() + "/rest/v1/mollo_scores?select=tmdb_id&limit=1";
+            // Compter sur la vue shows_verified qui ne contient que les shows avec score réel
+            String endpoint = supabaseConfig.getUrl() + "/rest/v1/shows_verified?select=tmdb_id&limit=1";
             HttpEntity<String> entity = new HttpEntity<>(headers);
             ResponseEntity<byte[]> response = restTemplate.exchange(endpoint, HttpMethod.GET, entity, byte[].class);
             
-            // Header Content-Range: "0-0/671" ou "*/671" -> le total est après le dernier "/"
+            // Header Content-Range: "0-0/18" -> le total est après le dernier "/"
             String contentRange = response.getHeaders().getFirst("Content-Range");
             int totalCount = 0;
             if (contentRange != null) {
                 int slashIdx = contentRange.lastIndexOf('/');
                 if (slashIdx != -1 && slashIdx + 1 < contentRange.length()) {
                     String totalStr = contentRange.substring(slashIdx + 1);
-                    // Parfois Supabase retourne "*,*" pour le range quand on ne demande pas de count exact
-                    // Mais avec limit=1 on devrait avoir un nombre
                     try {
                         totalCount = Integer.parseInt(totalStr);
                     } catch (NumberFormatException e) {
-                        // Si on ne peut pas parser, on laisse à 0
+                        // ignore
                     }
                 }
             }

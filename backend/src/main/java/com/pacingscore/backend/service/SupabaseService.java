@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -418,6 +419,111 @@ public class SupabaseService {
             String count = response.getHeaders().getFirst("Content-Range");
             return count != null && Integer.parseInt(count.split("/")[1]) > 0;
         } catch (Exception e) {
+            return false;
+        }
+    }
+
+    // ============ ADMIN METHODS ============
+
+    /**
+     * Récupère la liste des tâches échouées
+     * @param limit nombre max de résultats (null = tous)
+     * @param tmdbId filtre optionnel sur TMDB ID
+     * @return liste des tâches avec métadonnées
+     */
+    public List<Map<String, Object>> getFailedTasks(Integer limit, String tmdbId) {
+        try {
+            StringBuilder endpoint = new StringBuilder(supabaseConfig.getUrl() + "/rest/v1/analysis_tasks?status=eq.failed&order=created_at.desc");
+            if (tmdbId != null && !tmdbId.isEmpty()) {
+                endpoint.append("&tmdb_id=eq.").append(tmdbId);
+            }
+            if (limit != null && limit > 0) {
+                endpoint.append("&limit=").append(limit);
+            }
+            // Sélectionne toutes les colonnes, y compris metadata (JSONB)
+            endpoint.append("&select=*");
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("apikey", supabaseConfig.getKey());
+            headers.set("Authorization", "Bearer " + supabaseConfig.getKey());
+            HttpEntity<String> entity = new HttpEntity<>(headers);
+
+            ResponseEntity<String> response = restTemplate.exchange(endpoint.toString(), HttpMethod.GET, entity, String.class);
+            String body = response.getBody();
+            if (body == null || body.isBlank() || body.equals("[]")) {
+                return new ArrayList<>();
+            }
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            List<Map<String, Object>> tasks = mapper.readValue(body,
+                mapper.getTypeFactory().constructCollectionType(List.class, Map.class));
+            
+            // Enrichir avec le titre depuis metadata
+            for (Map<String, Object> task : tasks) {
+                Object meta = task.get("metadata");
+                if (meta instanceof Map) {
+                    Map<String, Object> metadata = (Map<String, Object>) meta;
+                    String title = (String) metadata.getOrDefault("title", "Inconnu");
+                    task.put("title", title);
+                }
+            }
+            return tasks;
+        } catch (Exception e) {
+            System.err.println("Erreur getFailedTasks: " + e.getMessage());
+            e.printStackTrace();
+            return new ArrayList<>();
+        }
+    }
+
+    /**
+     * Réinitialise une tâche spécifique (la remet en pending)
+     * @param taskId ID de la tâche
+     * @return true si la tâche a été trouvée et mise à jour
+     */
+    public boolean resetTask(String taskId) {
+        try {
+            String url = supabaseConfig.getUrl() + "/rest/v1/analysis_tasks?id=eq." + taskId;
+            
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("apikey", supabaseConfig.getKey());
+            headers.set("Authorization", "Bearer " + supabaseConfig.getKey());
+            headers.set("Content-Type", "application/json");
+            headers.set("Accept", "application/json");
+            headers.set("X-HTTP-Method-Override", "PATCH");
+
+            String jsonPayload = "{\"status\":\"pending\",\"error_message\":null}";
+            HttpEntity<String> entity = new HttpEntity<>(jsonPayload, headers);
+
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
+            int statusCode = response.getStatusCodeValue();
+            // Si la tâche existait, Supabase retourne 204 No Content ou 200 avec le JSON
+            return statusCode == 204 || statusCode == 200 || statusCode == 201;
+        } catch (Exception e) {
+            System.err.println("Erreur resetTask: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * Supprime une tâche spécifique
+     * @param taskId ID de la tâche
+     * @return true si la tâche a été supprimée
+     */
+    public boolean deleteTask(String taskId) {
+        try {
+            String url = supabaseConfig.getUrl() + "/rest/v1/analysis_tasks?id=eq." + taskId;
+            
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("apikey", supabaseConfig.getKey());
+            headers.set("Authorization", "Bearer " + supabaseConfig.getKey());
+            HttpEntity<String> entity = new HttpEntity<>(headers);
+
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.DELETE, entity, String.class);
+            int statusCode = response.getStatusCodeValue();
+            return statusCode == 204 || statusCode == 200;
+        } catch (Exception e) {
+            System.err.println("Erreur deleteTask: " + e.getMessage());
+            e.printStackTrace();
             return false;
         }
     }
