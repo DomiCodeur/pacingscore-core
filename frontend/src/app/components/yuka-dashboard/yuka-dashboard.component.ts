@@ -1,567 +1,100 @@
-import { Component, OnInit, HostListener } from '@angular/core';
-import { FormControl } from '@angular/forms';
-import { debounceTime, distinctUntilChanged, switchMap, catchError, of } from 'rxjs';
+import { Component, OnInit, inject, signal, computed, HostListener } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormControl, ReactiveFormsModule } from '@angular/forms';
+import { debounceTime, distinctUntilChanged } from 'rxjs';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { SpringBootService, Show } from '../../services/spring-boot.service';
 
 @Component({
   selector: 'app-yuka-dashboard',
-  template: `
-    <!-- Hero Section -->
-    <section class="bg-gradient-to-b from-green-50 to-white py-12 md:py-16">
-      <div class="max-w-4xl mx-auto px-4 text-center">
-        <div class="inline-flex items-center gap-2 bg-white px-4 py-2 rounded-full shadow-sm mb-6">
-          <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-          <span class="text-sm font-semibold text-green-700">Nouveau : Données TMDB synchronisées</span>
-        </div>
-        
-        <h2 class="text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-4 leading-tight">
-          Vérifiez le rythme de montage de vos
-          <span class="text-green-500">dessins animés</span>
-        </h2>
-        
-        <p class="text-lg md:text-xl text-gray-600 mb-8 max-w-2xl mx-auto leading-relaxed">
-          Protégez l'attention de vos enfants. Découvrez rapidement si un contenu est adapté à leur âge.
-        </p>
-
-        <!-- Stats -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
-          <div class="bg-white rounded-2xl p-6 shadow-sm">
-            <div class="text-3xl font-bold text-green-500">{{ totalShowsToDisplay }}</div>
-            <div class="text-sm text-gray-500 font-medium">Dessins animés analysés</div>
-          </div>
-          <div class="bg-white rounded-2xl p-6 shadow-sm">
-            <div class="text-3xl font-bold text-green-500">{{ getAverageScore().toFixed(1) }}</div>
-            <div class="text-sm text-gray-500 font-medium">Score moyen</div>
-          </div>
-          <div class="bg-white rounded-2xl p-6 shadow-sm">
-            <div class="text-3xl font-bold text-green-500">{{ getBestScore() }}</div>
-            <div class="text-sm text-gray-500 font-medium">Meilleur score</div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Main Content -->
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      
-      <!-- Loading State -->
-      <div *ngIf="loading" class="flex flex-col items-center justify-center py-20">
-        <div class="animate-spin rounded-full h-16 w-16 border-4 border-green-500 border-t-transparent mb-4"></div>
-        <p class="text-gray-500 font-medium animate-pulse">Récupération des données TMDB...</p>
-      </div>
-
-      <ng-container *ngIf="!loading">
-        <!-- Filters -->
-        <div class="flex flex-col gap-4 items-center mb-10">
-          <!-- Rythme -->
-          <div class="flex flex-wrap gap-2 justify-center">
-            <span class="w-full text-center text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Rythme</span>
-            <button 
-              *ngFor="let filter of filters"
-              (click)="applyFilter(filter)"
-              [ngClass]="activeFilter === filter.id ? 'bg-green-500 text-white border-green-500 shadow-md' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'"
-              class="px-4 py-2 rounded-full text-sm font-semibold border-2 transition-all duration-200"
-            >
-              {{ filter.label }}
-            </button>
-          </div>
-
-          <!-- Âge -->
-          <div class="flex flex-wrap gap-2 justify-center">
-            <span class="w-full text-center text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Âge conseillé</span>
-            <button 
-              *ngFor="let age of ageFilters"
-              (click)="applyAgeFilter(age.id)"
-              [ngClass]="activeAgeFilter === age.id ? 'bg-blue-500 text-white border-blue-500 shadow-md' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'"
-              class="px-4 py-2 rounded-full text-sm font-semibold border-2 transition-all duration-200"
-            >
-              {{ age.label }}
-            </button>
-          </div>
-
-          <!-- Type -->
-          <div class="flex flex-wrap gap-2 justify-center">
-            <span class="w-full text-center text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Type</span>
-            <button 
-              *ngFor="let type of typeFilters"
-              (click)="applyTypeFilter(type.id)"
-              [ngClass]="activeTypeFilter === type.id ? 'bg-purple-500 text-white border-purple-500 shadow-md' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'"
-              class="px-4 py-2 rounded-full text-sm font-semibold border-2 transition-all duration-200"
-            >
-              {{ type.label }}
-            </button>
-          </div>
-
-          <!-- Tranche d'âge développementale -->
-          <div class="flex flex-wrap gap-2 justify-center">
-            <span class="w-full text-center text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Tranche d'âge</span>
-            <button 
-              *ngFor="let dage of developmentalAgeFilters"
-              (click)="applyDevelopmentalAgeFilter(dage.id)"
-              [ngClass]="activeDevelopmentalAgeFilter === dage.id ? 'bg-indigo-500 text-white border-indigo-500 shadow-md' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'"
-              class="px-4 py-2 rounded-full text-sm font-semibold border-2 transition-all duration-200"
-            >
-              {{ dage.label }}
-            </button>
-          </div>
-        </div>
-
-        <!-- Results Header -->
-        <div class="flex items-center justify-between mb-6 border-b border-gray-200 pb-4">
-          <div class="flex items-center gap-4">
-            <button (click)="loadLatestShows()" class="px-4 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-semibold hover:bg-green-200 transition-colors">
-              Nouveautés
-            </button>
-            <h3 class="text-xl font-bold text-gray-900" id="resultsTitle">
-              {{ getResultsTitle() }}
-            </h3>
-          </div>
-          <span class="text-sm text-gray-500 font-medium">
-            {{ filteredShows.length }} résultat{{ filteredShows.length > 1 ? 's' : '' }}
-          </span>
-        </div>
-
-        <!-- Shows Grid -->
-        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
-          <div 
-            *ngFor="let show of filteredShows"
-            (click)="openModal(show)"
-            class="group cursor-pointer"
-          >
-            <div class="relative rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
-              <!-- Image Container -->
-              <div class="aspect-[2/3] bg-gradient-to-br from-gray-100 to-gray-200 relative overflow-hidden">
-                <!-- Badges top left -->
-                <div class="absolute top-2 left-2 flex flex-col gap-1 z-10">
-                  <div class="px-2.5 py-1 rounded-lg text-white text-[10px] font-black shadow-lg"
-                       [style.background]="getScoreBg(show.composite_score)">
-                    {{ show.composite_score }}
-                  </div>
-                  <div *ngIf="show.video_type" class="px-2 py-0.5 rounded text-[9px] font-semibold text-gray-700 bg-white/90 backdrop-blur shadow-sm self-start">
-                    {{ getVideoTypeLabel(show.video_type) }}
-                  </div>
-                </div>
-
-                <!-- Poster -->
-                <img 
-                  *ngIf="show.poster_path && !show.poster_path.includes('assets/')"
-                  [src]="show.poster_path"
-                  [alt]="show.title"
-                  class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                  loading="lazy"
-                >
-                
-                <!-- Fallback if no image -->
-                <div *ngIf="!show.poster_path || show.poster_path.includes('assets/')" 
-                     class="w-full h-full flex flex-col items-center justify-center p-4 bg-gray-100">
-                  <div class="text-3xl mb-2">🎬</div>
-                  <div class="text-xs font-bold text-gray-400 text-center uppercase tracking-wider">{{ show.title }}</div>
-                </div>
-
-                <!-- Hover Overlay -->
-                <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
-                  <div class="bg-white text-gray-900 px-4 py-2 rounded-full text-xs font-bold shadow-lg">Détails</div>
-                </div>
-              </div>
-
-              <!-- Info Section -->
-              <div class="p-3 bg-white border-t border-gray-50">
-                <h4 class="font-bold text-gray-900 text-sm mb-1 line-clamp-1">
-                  {{ show.title }}
-                </h4>
-                <div class="flex items-center gap-2 mb-2 flex-wrap">
-                   <span class="px-1.5 py-0.5 bg-gray-100 rounded text-[10px] font-bold text-gray-500">{{ show.age_recommendation || '0+' }}</span>
-                   <span *ngIf="show.target_developmental_age" class="px-1.5 py-0.5 bg-blue-100 rounded text-[10px] font-bold text-blue-600">{{ show.target_developmental_age }}</span>
-                   <span class="text-[10px] text-gray-400">⏱️ {{ show.average_shot_length || '?' }}s</span>
-                </div>
-                <div class="h-1 rounded-full overflow-hidden bg-gray-100">
-                  <div class="h-full" [style.width]="show.composite_score + '%'" [style.background]="getScoreBg(show.composite_score)"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- No Results -->
-        <div *ngIf="filteredShows.length === 0" class="text-center py-20">
-          <div class="text-6xl mb-4">🔍</div>
-          <h3 class="text-xl font-semibold text-gray-900 mb-2">Aucun résultat trouvé</h3>
-          <p class="text-gray-500">Essayez une autre recherche.</p>
-        </div>
-
-        <!-- Chargement de plus de pages -->
-        <div *ngIf="loadingMore" class="flex justify-center py-8">
-          <div class="animate-spin rounded-full h-10 w-10 border-4 border-green-500 border-t-transparent"></div>
-        </div>
-
-        <!-- Fin des résultats -->
-        <div *ngIf="!hasMore && filteredShows.length > 0" class="text-center py-8 text-gray-500 text-sm font-medium">
-          Tous les résultats sont affichés
-        </div>
-      </ng-container>
-    </main>
-
-    <!-- Modal Détails (Inchangée mais simplifiée) -->
-    <div *ngIf="selectedShow" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" (click)="closeModal()"></div>
-      <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden relative z-10 transition-all transform scale-100">
-          <div class="h-32 p-6 flex flex-col justify-end text-white" [style.background]="getModalGradient(selectedShow.composite_score)">
-              <h3 class="text-2xl font-black flex items-center gap-2">
-                {{ selectedShow.title }}
-              </h3>
-              <p class="text-sm opacity-90 font-medium">{{ selectedShow.evaluation_label }} • Score {{ selectedShow.composite_score }}/100</p>
-          </div>
-          <div class="p-8">
-              <p class="text-gray-600 mb-8 leading-relaxed font-medium">
-                Cette série a un rythme de montage <strong>{{ selectedShow.evaluation_label.toLowerCase() }}</strong> pour le développement cognitif des jeunes enfants.
-              </p>
-              <div class="grid grid-cols-2 gap-4 mb-8">
-                  <div class="bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                      <div class="text-xs font-bold text-gray-400 uppercase mb-1">Âge conseillé</div>
-                      <div class="text-xl font-black text-gray-900">{{ selectedShow.age_recommendation || 'Tout public' }}</div>
-                  </div>
-                  <div class="bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                      <div class="text-xs font-bold text-gray-400 uppercase mb-1">Moyenne Plan</div>
-                      <div class="text-xl font-black text-gray-900">{{ selectedShow.average_shot_length || '?' }}s</div>
-                  </div>
-                  <div class="bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                      <div class="text-xs font-bold text-gray-400 uppercase mb-1">Tranche d'âge développementale</div>
-                      <div class="text-xl font-black text-gray-900">{{ selectedShow.target_developmental_age || 'Non spécifiée' }}</div>
-                  </div>
-              </div>
-              <button (click)="closeModal()" class="w-full py-4 bg-gray-900 text-white rounded-2xl font-bold hover:bg-gray-800 transition-colors shadow-lg">
-                Fermer
-              </button>
-          </div>
-      </div>
-    </div>
-
-    <!-- Footer -->
-    <footer class="bg-white border-t border-gray-100 py-10">
-      <div class="max-w-7xl mx-auto px-4 text-center">
-        <div class="text-gray-400 text-xs font-bold tracking-widest uppercase mb-2">Mollo Project</div>
-        <p class="text-gray-400 text-[10px]">Utilise l'API TMDB pour les métadonnées et images.</p>
-      </div>
-    </footer>
-  `,
-  styles: [`\n    :host { display: block; background: #fafafa; min-height: 100vh; }\n    .line-clamp-1 { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }\n  `]
+  standalone: true,
+  imports: [CommonModule, ReactiveFormsModule],
+  templateUrl: './yuka-dashboard.component.html',
+  styleUrl: './yuka-dashboard.component.css'
 })
 export class YukaDashboardComponent implements OnInit {
-  shows: Show[] = [];
-  filteredShows: Show[] = [];
-  loading = false;
-  loadingMore = false;
-  hasMore = true;
-  pageSize = 50;
-  currentPage = 0;
+  private springBootService = inject(SpringBootService);
+
+  // 🌟 État géré par des Signals
+  shows = signal<Show[]>([]);
+  totalShows = signal(0);
+  loading = signal(false);
+  loadingMore = signal(false);
+  hasMore = signal(true);
+  selectedShow = signal<Show | null>(null);
+
+  // 🌟 Signaux de filtrage
+  activeFilter = signal('all');
+  activeAgeFilter = signal('all');
+  activeTypeFilter = signal('all');
+  activeDevelopmentalAgeFilter = signal('all');
+
   searchControl = new FormControl('');
-  selectedShow: Show | null = null;
-  activeFilter = 'all';
-  totalShows = 0; // nombre total de shows réellement analysés
+  searchTerm = toSignal(this.searchControl.valueChanges.pipe(
+    debounceTime(400),
+    distinctUntilChanged()
+  ), { initialValue: '' });
 
-    filters = [
-    { id: 'all', label: 'Tous' },
-    { id: 'excellent', label: 'Lent (80+)' },
-    { id: 'good', label: 'Bon (60-80)' },
-    { id: 'moderate', label: 'Moyen (40-60)' },
-    { id: 'fast', label: 'Énergique (<40)' }
-  ];
+  // 🌟 Logic Déclarative : Recalcul automatique et performant
+  filteredShows = computed(() => {
+    let results = this.shows();
+    const term = this.searchTerm()?.toLowerCase();
+    
+    if (term) {
+      results = results.filter(s => s.title.toLowerCase().includes(term));
+    }
 
-  ageFilters = [
-    { id: 'all', label: 'Tous âges' },
-    { id: '0+', label: '0+' },
-    { id: '3+', label: '3+' },
-    { id: '6+', label: '6+' },
-    { id: '10+', label: '10+' }
-  ];
-  activeAgeFilter = 'all';
+    // Filtrage par rythme
+    const pacing = this.activeFilter();
+    if (pacing === 'excellent') results = results.filter(s => s.composite_score >= 80);
+    else if (pacing === 'good') results = results.filter(s => s.composite_score >= 60 && s.composite_score < 80);
+    else if (pacing === 'moderate') results = results.filter(s => s.composite_score >= 40 && s.composite_score < 60);
+    else if (pacing === 'fast') results = results.filter(s => s.composite_score < 40);
 
-  // Filtres de tranche d'âge développementale (0-2 ans, 3-5 ans, etc.)
-  developmentalAgeFilters = [
-    { id: 'all', label: 'Toutes tranches' },
-    { id: '0-2 ans', label: '0-2 ans' },
-    { id: '3-5 ans', label: '3-5 ans' },
-    { id: '6-8 ans', label: '6-8 ans' },
-    { id: '9-10 ans', label: '9-10 ans' }
-  ];
-  activeDevelopmentalAgeFilter = 'all';
+    // Filtrage par âge et type
+    if (this.activeAgeFilter() !== 'all') {
+      results = results.filter(s => s.age_recommendation === this.activeAgeFilter());
+    }
+    if (this.activeTypeFilter() !== 'all') {
+      results = results.filter(s => s.media_type === this.activeTypeFilter());
+    }
 
-  typeFilters = [
-    { id: 'all', label: 'Tous' },
-    { id: 'movie', label: 'Films' },
-    { id: 'tv', label: 'Séries' }
-  ];
-  activeTypeFilter = 'all';
+    return results;
+  });
 
-  constructor(private springBootService: SpringBootService) {}
+  averageScore = computed(() => {
+    const s = this.shows();
+    return s.length ? s.reduce((sum, item) => sum + item.composite_score, 0) / s.length : 0;
+  });
 
   ngOnInit() {
-    // Charger le nombre total de shows vérifiés
-    this.springBootService.getVerifiedShowsCount().subscribe({
-      next: (res) => {
-        this.totalShows = res.count;
-      },
-      error: (err) => {
-        console.error('Erreur chargement compte', err);
-        this.totalShows = 0;
-      }
-    });
-
-    // Charger la première page de shows vérifiés
+    this.springBootService.getVerifiedShowsCount().subscribe(res => this.totalShows.set(res.count));
     this.loadPage(0);
+  }
 
-    // Recherche : réinitialiser la pagination et charger depuis la page 0
-    this.searchControl.valueChanges.pipe(
-      debounceTime(400),
-      distinctUntilChanged(),
-      switchMap((term) => {
-        this.resetPagination();
-        this.loading = true;
-        const targetAge = this.activeDevelopmentalAgeFilter === 'all' ? undefined : this.activeDevelopmentalAgeFilter;
-        if (term) {
-          // Recherche : on utilise getAllShowsPaginated avec le terme de recherche
-          return this.springBootService.getAllShowsPaginated(
-            this.pageSize, 
-            0, 
-            this.activeAgeFilter,
-            0,
-            term,
-            this.activeTypeFilter === 'all' ? undefined : this.activeTypeFilter,
-            true, // verified only
-            targetAge
-          );
-        } else {
-          return this.springBootService.getAllShowsPaginated(
-            this.pageSize, 
-            0,
-            this.activeAgeFilter,
-            0,
-            undefined,
-            this.activeTypeFilter === 'all' ? undefined : this.activeTypeFilter,
-            true, // verified only
-            targetAge
-          );
+  loadPage(page: number) {
+    if (page === 0) this.loading.set(true);
+    else this.loadingMore.set(true);
+
+    this.springBootService.getAllShowsPaginated(50, page * 50, 'all', 0, undefined, undefined, true)
+      .subscribe({
+        next: (newShows) => {
+          this.shows.update(current => page === 0 ? newShows : [...current, ...newShows]);
+          this.hasMore.set(newShows.length >= 50);
+          this.loading.set(false);
+          this.loadingMore.set(false);
         }
-      }),
-      catchError(() => {
-        this.loading = false;
-        return of([]);
-      })
-    ).subscribe((shows) => {
-      this.loading = false;
-      this.shows = shows;
-      this.hasMore = shows.length >= this.pageSize;
-      this.currentPage = 0;
-      this.applyCurrentFilter();
-    });
+      });
   }
 
   @HostListener('window:scroll', [])
-  onWindowScroll(): void {
-    this.handleScroll();
-  }
-
-  private handleScroll(): void {
-    if (this.loading || this.loadingMore || !this.hasMore) {
-      return;
-    }
-    // Vérifier si on est proche du bas (200px)
-    const windowHeight = window.innerHeight;
-    const documentHeight = document.documentElement.scrollHeight;
-    const scrollTop = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
-    if (scrollTop + windowHeight >= documentHeight - 200) {
-      this.loadNextPage();
+  onScroll() {
+    const pos = (document.documentElement.scrollTop || document.body.scrollTop) + document.documentElement.offsetHeight;
+    const max = document.documentElement.scrollHeight;
+    if (pos >= max - 200 && !this.loadingMore() && this.hasMore()) {
+      this.loadPage(Math.floor(this.shows().length / 50));
     }
   }
 
-  loadPage(page: number): void {
-    if (page === 0) {
-      this.loading = true;
-    } else {
-      this.loadingMore = true;
-    }
-    const age = this.activeAgeFilter;
-    const targetAge = this.activeDevelopmentalAgeFilter === 'all' ? undefined : this.activeDevelopmentalAgeFilter;
-    this.springBootService.getAllShowsPaginated(
-      this.pageSize,
-      page * this.pageSize,
-      age,
-      0, // minScore non filtré ici
-      undefined,
-      this.activeTypeFilter === 'all' ? undefined : this.activeTypeFilter,
-      true, // verified only
-      targetAge
-    ).subscribe({
-      next: (newShows) => {
-        if (page === 0) {
-          this.shows = newShows;
-        } else {
-          this.shows = [...this.shows, ...newShows];
-        }
-        this.hasMore = newShows.length >= this.pageSize;
-        if (page === 0) {
-          this.loading = false;
-        } else {
-          this.loadingMore = false;
-        }
-        this.applyCurrentFilter();
-      },
-      error: (err) => {
-        console.error('Erreur chargement page', page, err);
-        if (page === 0) {
-          this.loading = false;
-          this.shows = [];
-          this.filteredShows = [];
-        } else {
-          this.loadingMore = false;
-        }
-      }
-    });
-  }
-
-  loadNextPage(): void {
-    if (!this.hasMore || this.loadingMore) return;
-    this.currentPage++;
-    this.loadPage(this.currentPage);
-  }
-
-  resetPagination(): void {
-    this.currentPage = 0;
-    this.hasMore = true;
-  }
-
-  loadShows() {
-    this.loading = true;
-    this.springBootService.getAllShows().subscribe({
-      next: (shows) => {
-        this.shows = shows;
-        this.filteredShows = shows;
-        this.loading = false;
-      },
-      error: () => this.loading = false
-    });
-  }
-
-  loadLatestShows() {
-    this.resetPagination();
-    this.loading = true;
-    this.springBootService.getLatestShows(20).subscribe({
-      next: (shows) => {
-        this.shows = shows;
-        this.hasMore = false; // les latest ne sont pas paginés
-        this.applyCurrentFilter();
-        this.loading = false;
-      },
-      error: () => this.loading = false
-    });
-  }
-
-  applyAgeFilter(ageId: string) {
-    this.activeAgeFilter = ageId;
-    this.applyAllFilters();
-  }
-
-  applyTypeFilter(typeId: string) {
-    this.activeTypeFilter = typeId;
-    this.applyAllFilters();
-  }
-
-  applyDevelopmentalAgeFilter(dageId: string) {
-    this.activeDevelopmentalAgeFilter = dageId;
-    this.applyAllFilters();
-  }
-
-  applyFilter(filter: any) {
-    this.activeFilter = filter.id;
-    this.applyAllFilters();
-  }
-
-  applyAllFilters() {
-    let results = [...this.shows];
-
-    // Filtrage par rythme (Pacing)
-    if (this.activeFilter === 'excellent') {
-      results = results.filter(s => s.composite_score >= 80);
-    } else if (this.activeFilter === 'good') {
-      results = results.filter(s => s.composite_score >= 60 && s.composite_score < 80);
-    } else if (this.activeFilter === 'moderate') {
-      results = results.filter(s => s.composite_score >= 40 && s.composite_score < 60);
-    } else if (this.activeFilter === 'fast') {
-      results = results.filter(s => s.composite_score < 40);
-    }
-
-    // Filtrage par âge
-    if (this.activeAgeFilter !== 'all') {
-      results = results.filter(s => s.age_recommendation === this.activeAgeFilter);
-    }
-
-    // Filtrage par type
-    if (this.activeTypeFilter !== 'all') {
-      results = results.filter(s => s.media_type === this.activeTypeFilter);
-    }
-
-    // Filtrage par tranche d'âge développementale
-    if (this.activeDevelopmentalAgeFilter !== 'all') {
-      results = results.filter(s => s.target_developmental_age === this.activeDevelopmentalAgeFilter);
-    }
-
-    this.filteredShows = results;
-  }
-
-  applyCurrentFilter() {
-    this.applyFilter({ id: this.activeFilter });
-  }
-
-  getResultsTitle(): string {
-    if (this.searchControl.value) return `Recherche : ${this.searchControl.value}`;
-    return 'Analyses Récentes';
-  }
-
-  getScoreBg(score: number): string {
-    if (score >= 80) return '#22c55e'; // green-500
-    if (score >= 60) return '#84cc16'; // lime-500
-    if (score >= 40) return '#f59e0b'; // amber-500
-    return '#ef4444'; // red-500
-  }
-
-  getModalGradient(score: number): string {
-    if (score >= 80) return '#22c55e';
-    if (score >= 60) return '#84cc16';
-    if (score >= 40) return '#f59e0b';
-    return '#ef4444';
-  }
-
-  getAverageScore(): number {
-    if (this.shows.length === 0) return 0;
-    return this.shows.reduce((sum, s) => sum + s.composite_score, 0) / this.shows.length;
-  }
-
-  getBestScore(): string {
-    if (this.shows.length === 0) return '0';
-    return Math.max(...this.shows.map(s => s.composite_score)).toString();
-  }
-
-  getVideoTypeLabel(type: string): string {
-    const labels: {[key: string]: string} = {
-      'episode': 'Épisode',
-      'film': 'Film',
-      'movie': 'Film',
-      'extrait': 'Extrait',
-      'trailer': 'Bande-annonce',
-      'full': 'Complet'
-    };
-    return labels[type] || type;
-  }
-
-  get totalShowsToDisplay(): number {
-    return this.totalShows > 0 ? this.totalShows : this.shows.length;
-  }
-
-  openModal(show: Show) {
-    this.selectedShow = show;
-  }
-
-  closeModal() {
-    this.selectedShow = null;
-  }
+  getScoreBg = (score: number) => score >= 80 ? '#22c55e' : score >= 60 ? '#84cc16' : score >= 40 ? '#f59e0b' : '#ef4444';
 }

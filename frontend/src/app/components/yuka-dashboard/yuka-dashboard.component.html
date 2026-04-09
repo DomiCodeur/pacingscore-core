@@ -1,0 +1,59 @@
+<section class="bg-gradient-to-b from-green-50 to-white py-12">
+  <div class="max-w-4xl mx-auto px-4 text-center">
+    <h2 class="text-4xl font-bold text-gray-900 mb-4">
+      Vérifiez le rythme de vos <span class="text-green-500">dessins animés</span>
+    </h2>
+    
+    <div class="grid grid-cols-3 gap-4 mt-8">
+      <div class="bg-white rounded-2xl p-6 shadow-sm">
+        <div class="text-3xl font-bold text-green-500">{{ totalShows() }}</div>
+        <div class="text-sm text-gray-500">Analysés</div>
+      </div>
+      <div class="bg-white rounded-2xl p-6 shadow-sm">
+        <div class="text-3xl font-bold text-green-500">{{ averageScore() | number:'1.1-1' }}</div>
+        <div class="text-sm text-gray-500">Score moyen</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<main class="max-w-7xl mx-auto px-4 py-8">
+  @if (loading()) {
+    <div class="flex flex-col items-center py-20">
+      <div class="animate-spin rounded-full h-12 w-12 border-4 border-green-500 border-t-transparent"></div>
+    </div>
+  } @else {
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-5">
+      @for (show of filteredShows(); track show.id) {
+        <div (click)="selectedShow.set(show)" class="group cursor-pointer bg-white rounded-2xl shadow-sm overflow-hidden border border-gray-100">
+          <div class="aspect-[2/3] relative overflow-hidden bg-gray-100">
+            <img [src]="show.poster_path" [alt]="show.title" class="w-full h-full object-cover">
+            <div class="absolute top-2 left-2 px-2 py-1 rounded-lg text-white font-bold text-xs"
+                 [style.background]="getScoreBg(show.composite_score)">
+              {{ show.composite_score }}%
+            </div>
+          </div>
+          <div class="p-3">
+            <h4 class="font-bold text-sm truncate">{{ show.title }}</h4>
+            <p class="text-[10px] text-gray-400 mt-1">{{ show.age_recommendation }} • {{ show.average_shot_length }}s</p>
+          </div>
+        </div>
+      }
+    </div>
+  }
+</main>
+
+@if (selectedShow(); as show) {
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" (click)="selectedShow.set(null)"></div>
+    <div class="bg-white rounded-3xl w-full max-w-lg overflow-hidden relative z-10">
+      <div class="h-32 p-6 flex flex-col justify-end text-white" [style.background]="getScoreBg(show.composite_score)">
+        <h3 class="text-2xl font-black">{{ show.title }}</h3>
+      </div>
+      <div class="p-8">
+        <p class="text-gray-600 mb-6">{{ show.evaluation_label }}</p>
+        <button (click)="selectedShow.set(null)" class="w-full py-4 bg-gray-900 text-white rounded-2xl font-bold">Fermer</button>
+      </div>
+    </div>
+  </div>
+}

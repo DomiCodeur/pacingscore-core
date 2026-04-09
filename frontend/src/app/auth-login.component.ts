@@ -2,9 +2,12 @@ import { Component } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { SupabaseAuthService } from './services/supabase-auth.service';
+import { ReactiveFormsModule } from '@angular/forms';
 
 @Component({
   selector: 'app-auth-login',
+  standalone: true,
+  imports: [ReactiveFormsModule],
   template: `
     <div class="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <div class="max-w-md w-full bg-white rounded-2xl shadow-lg p-8">
